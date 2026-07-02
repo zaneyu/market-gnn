@@ -49,6 +49,19 @@ def own_momentum(returns: pd.DataFrame, asof, nodes, *, lookback: int) -> pd.Ser
     return (1 + hist).prod() - 1
 
 
+def _estimate_phi(ic: pd.Series) -> float:
+    """Lag-1 autocorrelation of the IC series, clamped to [0, 0.9], so the MDE's
+    AR(1) assumption is self-consistent with the series it describes."""
+    x = ic.dropna().to_numpy()
+    if len(x) < 5:
+        return 0.3
+    x = x - x.mean()
+    denom = float(x @ x)
+    if denom == 0:
+        return 0.0
+    return float(np.clip((x[1:] @ x[:-1]) / denom, 0.0, 0.9))
+
+
 def _residualize(y: np.ndarray, x: np.ndarray) -> np.ndarray:
     """Cross-sectional residual of y after removing x's linear fit (both demeaned)."""
     m = np.isfinite(x) & np.isfinite(y)
@@ -81,6 +94,7 @@ def run_leadlag(
         return make_graph(kind, rets, sectors, asof, nodes, corr_window=corr_window, k=k)
 
     rows = []
+    own_ic_once = None  # own-momentum control is edge-independent -> emit one row
     for kind in edge_kinds:
         seeds = rewire_seeds if kind == "rewire" else (0,)
         seed_ic_raw, seed_ic_res, seed_ic_own = [], [], []
@@ -104,17 +118,29 @@ def run_leadlag(
             ic_res = per_date_ic(df["ll"], resid.reindex(df.index), df["date"]).dropna()
             seed_ic_raw.append(ic_raw); seed_ic_res.append(ic_res); seed_ic_own.append(ic_own)
 
-        for name, series_list in (("leadlag", seed_ic_raw), ("leadlag_resid", seed_ic_res), ("own_mom", seed_ic_own)):
+        if own_ic_once is None:  # edge-independent control, computed once
+            own_ic_once = seed_ic_own[0]
+        for name, series_list in (("leadlag", seed_ic_raw), ("leadlag_resid", seed_ic_res)):
             means = [s.mean() for s in series_list]
             ic = series_list[0]
             s = ic_summary(ic)
-            mde = min_detectable_effect(n_dates=s["n"], ic_sd=max(ic.std(ddof=1), 1e-6), phi=0.3, n_sims=400)
+            mde = min_detectable_effect(n_dates=s["n"], ic_sd=max(ic.std(ddof=1), 1e-6),
+                                        phi=_estimate_phi(ic), n_sims=400)
             rows.append({
                 "edges": kind, "signal": name,
                 "mean_ic": float(np.mean(means)), "seed_std": float(np.std(means)) if len(means) > 1 else 0.0,
                 "hac_t": s["hac_t"], "p": two_sided_p(s["hac_t"]), "mde_80": mde, "n_dates": s["n"],
             })
 
+    # single own-momentum control row (does not depend on the graph)
+    s = ic_summary(own_ic_once)
+    rows.append({
+        "edges": "(none)", "signal": "own_mom", "mean_ic": float(own_ic_once.mean()), "seed_std": 0.0,
+        "hac_t": s["hac_t"], "p": two_sided_p(s["hac_t"]),
+        "mde_80": min_detectable_effect(n_dates=s["n"], ic_sd=max(own_ic_once.std(ddof=1), 1e-6),
+                                        phi=_estimate_phi(own_ic_once), n_sims=400),
+        "n_dates": s["n"],
+    })
     table = pd.DataFrame(rows)
     reject, q = benjamini_hochberg(table["p"].fillna(1.0).to_numpy())
     table["fdr_sig"], table["q"] = reject, q
