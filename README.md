@@ -29,10 +29,17 @@ signal, and decomposed where the apparent "graph alpha" actually comes from:
    of the model's 0.479, and the model is *worse* on QLIKE (level calibration).
 4. **Survivorship inflates it:** point-in-time membership correction shrinks the already-null
    return IC.
+5. **What DOES carry signal (positive control):** the same harness finds **short-term (1-day)
+   reversal strongly significant on real data** — IC +0.015, HAC t 3.4, p<0.001, FDR-sig. So
+   the graph nulls are *real absences*, bracketed by positive controls on both real data
+   (reversal) and synthetic data (planted lead-lag) — not a pipeline that can't find anything.
+   (Gross rank-IC; reversal is high-turnover and cost-fragile — reported as a statistical
+   control, not a tradable strategy.)
 
-**Net:** on this universe, no graph configuration adds return signal that survives leak-free,
-powered, control-checked evaluation — and this repo is the harness that separates a real effect
-from the survivorship / overlap / over-smoothing artifacts that make graph "alpha" look real.
+**Net:** the graph adds no return signal that survives leak-free, powered, control-checked
+evaluation; the return signal that *is* present (short-horizon reversal) is non-graph and
+cost-fragile — and this repo is the harness that separates a real effect from the survivorship /
+overlap / over-smoothing artifacts that make graph "alpha" look real.
 Full decomposition and numbers in [RESULTS.md](RESULTS.md).
 
 ## Why trust the null? The harness has teeth.
@@ -45,14 +52,14 @@ A null is only worth reporting if the pipeline could have found signal. Two guar
   purity of graph/features/labels is asserted, not assumed.
 
 ```bash
-pytest -q     # 45 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
+pytest -q     # 47 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 45 tests (43 without torch), ~25s
+pytest -q                        # 47 tests (45 without torch), ~26s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -109,7 +116,7 @@ return claims require the PIT path.**
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[stub])
                 data/   (download · universe[PIT membership])
-tests/          45 tests — leak/PIT/purge/stat/power/lead-lag harness
+tests/          47 tests — leak/PIT/purge/stat/power/lead-lag/positive-control harness
 configs/        default.yaml
 paper/note.md   writeup
 ```

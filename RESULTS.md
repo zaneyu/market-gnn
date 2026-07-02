@@ -148,13 +148,43 @@ consistent with the literature, where the effect lives in **small, illiquid name
 this universe excludes by construction) and has decayed post-2000. The rewire null and the
 planted-recovery bracket the claim: the harness would have seen it; it isn't there.
 
-## Headline (all five runs)
+## Run 6 — real-data positive control: the harness DOES find a non-null
+
+Are the graph nulls real absences, or can this pipeline just not find return signal?
+Answer by pointing the same leak-free HAC harness at pre-specified, textbook cross-sectional
+anomalies (not discovered or tuned here). `python -m marketgnn.signals`
+
+| signal        | mean IC | HAC t | p      | turnover | FDR sig |
+|---------------|---------|-------|--------|----------|---------|
+| **reversal_1d** | **+0.0151** | **+3.39** | **0.0007** | 0.33 | **YES** |
+| reversal_1w   | +0.0002 | +0.02 | 0.99   | 0.33     | no      |
+| momentum_12_1 | +0.0089 | +0.42 | 0.67   | 0.10     | n.s.    |
+
+**Read — a genuine non-null.** Short-term (1-day) reversal (Lehmann 1990 / Jegadeesh 1990) is
+**strongly significant** on real data — IC +0.015, HAC t 3.4, p<0.001 over 2,506 non-overlapping
+daily cross-sections, clearing FDR. So the pipeline finds real return signal *where it exists*;
+the graph nulls are genuine absences, not a broken harness. Note it decays by the weekly horizon
+(reversal_1w null) — which is exactly why the weekly graph runs saw nulls.
+
+**Honest caveat (stated, not buried):** this is **gross** rank-IC. reversal_1d is ~daily-turnover
+(0.33) and the microstructure reversal effect is largely arbitraged after realistic transaction
+costs — it is a statistical *positive control*, not a tradable strategy. Reporting the effect
+*and* its cost fragility is the point.
+
+## Headline (six runs)
 
 The contemporaneous graph is a **red herring** (Runs 1-2: frozen ≈ dynamic ≈ none; GNN ≈ MLP).
 The lead-lag channel — the only one that *should* carry return signal — is a **powered null on
 liquid large-caps** (Run 5), validated by a planted-signal recovery proving the pipeline
 detects the effect when present. The vol "predictability" is ~90% persistence (Run 3), and
-inclusion-timing correction shrinks the already-null return IC (Run 4). Net: **on this
-universe, no graph configuration adds cross-sectional return signal that survives leak-free,
-powered, control-checked evaluation — and here is the harness that can tell that apart from the
-survivorship/overlap/over-smoothing artifacts that make graph "alpha" look real.**
+inclusion-timing correction shrinks the already-null return IC (Run 4).
+
+**What DOES carry return signal (Run 6):** the same harness finds **short-term (1-day) reversal
+strongly significant on real data** (IC +0.015, HAC t 3.4, p<0.001, FDR-sig) — a genuine
+non-null. So the nulls above are **real absences bracketed by positive controls on both real
+data (reversal) and synthetic data (planted lead-lag)**, not a pipeline that can't find anything.
+
+Net: **the graph adds no cross-sectional return signal that survives leak-free, powered,
+control-checked evaluation; the return signal that IS present (short-horizon reversal) is
+non-graph and cost-fragile — and here is the harness that tells real effects apart from the
+survivorship / overlap / over-smoothing artifacts that make graph "alpha" look real.**
