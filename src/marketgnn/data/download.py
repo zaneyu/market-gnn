@@ -49,9 +49,10 @@ def load_market(*, synthetic: bool, tickers=None, start="2015-01-01", end="2024-
     if synthetic:
         return make_synthetic(**kw)
     try:
+        from .universe import default_sectors
+
         prices, volume, market = download_prices(tickers, start, end)
-        _, _, sectors, _ = make_synthetic(n_assets=prices.shape[1])
-        sectors.index = prices.columns  # real GICS sectors come from universe.py
+        sectors = default_sectors(list(prices.columns))
         return prices, volume, sectors, market
     except Exception as exc:  # noqa: BLE001 -- offline / missing dep -> synthetic
         print(f"[download] real data unavailable ({exc}); falling back to synthetic")

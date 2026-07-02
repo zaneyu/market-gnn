@@ -38,17 +38,45 @@ def _empty(nodes) -> Graph:
     return Graph(np.zeros((2, 0), np.int64), np.zeros(0, np.float32), np.asarray(nodes))
 
 
+def _corr_matrix(hist: pd.DataFrame, nodes, min_overlap: int, shrinkage) -> np.ndarray:
+    """Correlation matrix aligned to ``nodes``, optionally denoised.
+
+    A 60-day correlation over hundreds of names is badly under-determined, so most
+    of its week-to-week churn is estimation noise. ``shrinkage`` counters that:
+    ``"lw"`` = Ledoit-Wolf (built for p >= n), or a float in (0,1] = linear blend of
+    the raw correlation toward the identity (shrink spurious off-diagonals to 0).
+    """
+    raw = np.array(hist.corr(min_periods=min_overlap).reindex(index=nodes, columns=nodes), dtype=float)
+    if not shrinkage:
+        return raw
+    if shrinkage == "lw":
+        X = hist.reindex(columns=nodes).to_numpy()
+        Xc = X[~np.isnan(X).any(axis=1)]  # Ledoit-Wolf needs complete cases
+        if len(Xc) >= max(5, X.shape[1] // 2):
+            from sklearn.covariance import ledoit_wolf
+
+            cov, _ = ledoit_wolf(Xc)
+            d = np.sqrt(np.clip(np.diag(cov), 1e-12, None))
+            return cov / np.outer(d, d)
+        shrinkage = 0.2  # too sparse for LW -> light identity shrink of the raw estimate
+    delta = float(shrinkage)
+    out = (1 - delta) * np.nan_to_num(raw)
+    np.fill_diagonal(out, 1.0)
+    return out
+
+
 def correlation_knn(
-    returns: pd.DataFrame, asof, nodes, *, window: int, k: int, min_overlap: int | None = None
+    returns: pd.DataFrame, asof, nodes, *, window: int, k: int, min_overlap: int | None = None, shrinkage=None
 ) -> Graph:
     """kNN graph on trailing return correlation. Each node points at its k
-    strongest-|correlation| neighbours; edge weight is the signed correlation."""
+    strongest-|correlation| neighbours; edge weight is the signed correlation.
+    ``shrinkage`` (see ``_corr_matrix``) denoises the estimate to reduce spurious churn."""
     hist = returns.loc[:asof].iloc[-window:].reindex(columns=nodes)
     if len(hist) < 2:
         return _empty(nodes)
     min_overlap = min_overlap or max(5, window // 4)
-    corr = np.array(hist.corr(min_periods=min_overlap).reindex(index=nodes, columns=nodes), dtype=float)
-    np.fill_diagonal(corr, np.nan)  # needs a writable copy (np.array above)
+    corr = _corr_matrix(hist, nodes, min_overlap, shrinkage)
+    np.fill_diagonal(corr, np.nan)
     absc = np.abs(corr)
 
     n = len(nodes)

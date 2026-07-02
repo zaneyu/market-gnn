@@ -80,8 +80,14 @@ def _fold_predictions(model_name, dataset, cv, target, seed):
 def run(config: dict) -> pd.DataFrame:
     cfg = {**DEFAULTS, **config}
     from .data.download import load_market
+    from .data.universe import default_universe
 
-    prices, volume, sectors, market = load_market(synthetic=cfg.get("synthetic", True))
+    prices, volume, sectors, market = load_market(
+        synthetic=cfg.get("synthetic", True),
+        tickers=cfg.get("tickers") or default_universe(),
+        start=cfg.get("start", "2014-01-01"),
+        end=cfg.get("end", "2024-12-31"),
+    )
     rebal = rebalance_dates(prices.index, cfg["rebal_freq"])
     cv = PurgedWalkForward(
         label_horizon=cfg["purge_steps"], n_test=cfg["n_test"], embargo=cfg["embargo_steps"],

@@ -25,7 +25,7 @@ from .features import (
     neighbor_return_feature,
 )
 
-GRAPH_KINDS = ["correlation", "sector", "both", "random", "rewire", "none"]
+GRAPH_KINDS = ["correlation", "shrinkage", "frozen", "sector", "both", "random", "rewire", "none"]
 
 
 @dataclass
@@ -55,6 +55,8 @@ def make_graph(kind, returns, sectors, asof, nodes, *, corr_window, k, seed=0):
         return None
     if kind == "correlation":
         return G.correlation_knn(returns, asof, nodes, window=corr_window, k=k)
+    if kind == "shrinkage":  # denoised correlation (Ledoit-Wolf) -> less spurious churn
+        return G.correlation_knn(returns, asof, nodes, window=corr_window, k=k, shrinkage="lw")
     if kind == "sector":
         return G.sector_graph(sectors, nodes, max_degree=k)
     if kind == "both":
@@ -95,6 +97,7 @@ def build_dataset(
     """
     rets = prices.pct_change()
     rows, y_ret_rows, y_vol_rows, graphs = [], [], [], {}
+    frozen_graph = None  # for graph_kind == "frozen": estimated once, then reused
 
     for asof in rebal:
         if prices.index.get_indexer([asof])[0] < warmup:
@@ -107,7 +110,18 @@ def build_dataset(
         if len(nodes) < k + 2:
             continue
 
-        graph = make_graph(graph_kind, rets, sectors, asof, nodes, corr_window=corr_window, k=k)
+        if graph_kind == "frozen":
+            # Static topology: estimate ONCE (first eligible date, long window) and
+            # freeze. Still point-in-time -- the neighbour feature keeps updating
+            # daily over fixed edges. Assumes a constant universe.
+            if membership is not None:
+                raise NotImplementedError("frozen graph assumes a constant universe (membership=None)")
+            if frozen_graph is None:
+                long_w = min(len(prices), max(4 * corr_window, 504))
+                frozen_graph = G.correlation_knn(rets, asof, nodes, window=long_w, k=k, shrinkage="lw")
+            graph = frozen_graph
+        else:
+            graph = make_graph(graph_kind, rets, sectors, asof, nodes, corr_window=corr_window, k=k)
         feat = compute_features(prices, volume, asof, nodes, market=market)
         if graph is not None:
             feat["nbr_ret"] = neighbor_return_feature(rets, asof, graph, lookback=nbr_lookback)

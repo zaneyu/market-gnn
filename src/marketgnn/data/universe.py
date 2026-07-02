@@ -70,3 +70,51 @@ def russell1000_placeholder(tickers) -> None:
     """Real runs need PIT Russell 1000 membership (see README for sourcing). Returning
     None signals 'no membership mask' so downstream code restricts claims honestly."""
     return None
+
+
+# A liquid large-cap starter universe for the first real run. NOTE: this is the
+# *current* membership -> survivorship-biased. Return claims on this set are
+# restricted; the volatility target is far more robust. Replace with PIT Russell
+# 1000 membership (build_membership) for defensible return claims. See PLAN.md.
+DEFAULT_UNIVERSE = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "AVGO", "ADBE", "CRM",
+    "ORCL", "CSCO", "ACN", "INTC", "AMD", "QCOM", "TXN", "IBM", "INTU", "NOW",
+    "JPM", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW", "SPGI",
+    "V", "MA", "PYPL",
+    "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "TMO", "ABT", "DHR", "BMY", "AMGN", "CVS",
+    "HD", "MCD", "NKE", "SBUX", "LOW", "TGT", "BKNG", "TJX",
+    "PG", "KO", "PEP", "COST", "WMT", "MDLZ", "CL", "MO", "PM",
+    "XOM", "CVX", "COP", "SLB", "EOG",
+    "BA", "CAT", "GE", "HON", "UPS", "RTX", "LMT", "DE", "MMM", "UNP",
+    "DIS", "NFLX", "CMCSA", "T", "VZ", "TMUS",
+    "LIN", "NEE", "DUK", "SO", "AMT", "PLD", "SPG",
+]
+
+
+def default_universe() -> list[str]:
+    """Current large-cap set for a first real run. Survivorship-biased by
+    construction -- callers must restrict return claims accordingly."""
+    return list(DEFAULT_UNIVERSE)
+
+
+# Honest (approximate GICS) sector labels for the default universe, so the sector
+# graph is real structure rather than a placeholder. Static, as sectors should be.
+_SECTORS = {
+    "tech": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "AVGO", "ADBE", "CRM",
+             "ORCL", "CSCO", "ACN", "INTC", "AMD", "QCOM", "TXN", "IBM", "INTU", "NOW"],
+    "financials": ["JPM", "BAC", "WFC", "GS", "MS", "C", "AXP", "BLK", "SCHW", "SPGI",
+                   "V", "MA", "PYPL"],
+    "healthcare": ["UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "TMO", "ABT", "DHR", "BMY", "AMGN", "CVS"],
+    "consumer_disc": ["HD", "MCD", "NKE", "SBUX", "LOW", "TGT", "BKNG", "TJX"],
+    "consumer_staples": ["PG", "KO", "PEP", "COST", "WMT", "MDLZ", "CL", "MO", "PM"],
+    "energy": ["XOM", "CVX", "COP", "SLB", "EOG"],
+    "industrials": ["BA", "CAT", "GE", "HON", "UPS", "RTX", "LMT", "DE", "MMM", "UNP"],
+    "communications": ["DIS", "NFLX", "CMCSA", "T", "VZ", "TMUS"],
+    "utilities_re_materials": ["LIN", "NEE", "DUK", "SO", "AMT", "PLD", "SPG"],
+}
+_TICKER_SECTOR = {t: s for s, ts in _SECTORS.items() for t in ts}
+
+
+def default_sectors(tickers) -> "pd.Series":
+    """Sector label per ticker (approx GICS), 'other' if unknown."""
+    return pd.Series({t: _TICKER_SECTOR.get(t, "other") for t in tickers}, name="sector")
