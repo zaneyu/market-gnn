@@ -1,0 +1,195 @@
+"""Point-in-time graph construction.
+
+Every builder is a pure function of data at or before an as-of date; it must
+never read a row dated after ``asof``. The correlation builder slices
+``returns.loc[:asof]`` internally, so appending or mutating future rows in the
+input frame cannot change its output -- the property the PIT test asserts.
+
+Graphs are returned as plain numpy arrays (no torch dependency) so the hygiene
+tests and CI run without the GNN stack installed. The GNN model converts them to
+tensors at the edge.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+
+
+@dataclass(frozen=True)
+class Graph:
+    edge_index: np.ndarray  # int64 [2, E], directed src -> dst
+    edge_weight: np.ndarray  # float32 [E]
+    nodes: np.ndarray  # asset id at each node position
+
+    @property
+    def num_edges(self) -> int:
+        return int(self.edge_index.shape[1])
+
+    @property
+    def avg_degree(self) -> float:
+        n = len(self.nodes)
+        return self.num_edges / n if n else 0.0
+
+
+def _empty(nodes) -> Graph:
+    return Graph(np.zeros((2, 0), np.int64), np.zeros(0, np.float32), np.asarray(nodes))
+
+
+def correlation_knn(
+    returns: pd.DataFrame, asof, nodes, *, window: int, k: int, min_overlap: int | None = None
+) -> Graph:
+    """kNN graph on trailing return correlation. Each node points at its k
+    strongest-|correlation| neighbours; edge weight is the signed correlation."""
+    hist = returns.loc[:asof].iloc[-window:].reindex(columns=nodes)
+    if len(hist) < 2:
+        return _empty(nodes)
+    min_overlap = min_overlap or max(5, window // 4)
+    corr = np.array(hist.corr(min_periods=min_overlap).reindex(index=nodes, columns=nodes), dtype=float)
+    np.fill_diagonal(corr, np.nan)  # needs a writable copy (np.array above)
+    absc = np.abs(corr)
+
+    n = len(nodes)
+    kk = min(k, n - 1)
+    src, dst, w = [], [], []
+    for i in range(n):
+        row = absc[i]
+        valid = np.flatnonzero(~np.isnan(row))
+        if valid.size == 0:
+            continue
+        # Deterministic across numpy versions/platforms: sort by descending
+        # |corr|, breaking ties by ascending node index. lexsort's last key is
+        # primary, so (-|corr|) ascending == |corr| descending.
+        order = np.lexsort((valid, -row[valid]))
+        top = valid[order[:kk]]
+        for j in top:
+            src.append(i)
+            dst.append(int(j))
+            w.append(float(corr[i, j]))
+    if not src:
+        return _empty(nodes)
+    return Graph(np.array([src, dst], np.int64), np.array(w, np.float32), np.asarray(nodes))
+
+
+def sector_graph(sectors: pd.Series, nodes, *, max_degree: int | None = None, seed: int = 0) -> Graph:
+    """Fully connect same-sector names (optionally degree-capped for tractability)."""
+    s = sectors.reindex(nodes)
+    rng = np.random.default_rng(seed)
+    groups: dict = {}
+    for i, node in enumerate(nodes):
+        key = s.iloc[i]
+        if pd.isna(key):
+            continue
+        groups.setdefault(key, []).append(i)
+
+    src, dst = [], []
+    for members in groups.values():
+        for i in members:
+            others = [j for j in members if j != i]
+            if max_degree and len(others) > max_degree:
+                others = rng.choice(others, max_degree, replace=False).tolist()
+            for j in others:
+                src.append(i)
+                dst.append(int(j))
+    if not src:
+        return _empty(nodes)
+    ei = np.array([src, dst], np.int64)
+    return Graph(ei, np.ones(ei.shape[1], np.float32), np.asarray(nodes))
+
+
+def random_graph(nodes, *, degree: int, seed: int = 0) -> Graph:
+    """Degree-matched random control: the null the real graph must beat."""
+    n = len(nodes)
+    d = min(degree, n - 1)
+    if d < 1:
+        return _empty(nodes)
+    rng = np.random.default_rng(seed)
+    src, dst = [], []
+    for i in range(n):
+        choices = rng.choice(np.delete(np.arange(n), i), d, replace=False)
+        for j in choices:
+            src.append(i)
+            dst.append(int(j))
+    ei = np.array([src, dst], np.int64)
+    return Graph(ei, np.ones(ei.shape[1], np.float32), np.asarray(nodes))
+
+
+def match_random(graph: Graph, *, seed: int = 0) -> Graph:
+    """Weak random control matched only to *average* degree. Kept for comparison;
+    the real null is ``degree_preserving_rewire`` (matches the full degree sequence)."""
+    return random_graph(graph.nodes, degree=round(graph.avg_degree), seed=seed)
+
+
+def degree_preserving_rewire(graph: Graph, *, n_swaps: int | None = None, seed: int = 0) -> Graph:
+    """Degree-sequence-preserving random null (directed Maslov-Sneppen edge swaps).
+
+    Repeatedly pick edges (a->b), (c->d) and swap to (a->d), (c->b). This preserves
+    every node's in- AND out-degree exactly, so the GNN sees the same aggregation
+    fan-in/out as the real graph -- the only thing randomized is *which* neighbours.
+    That makes it the fair null for H2 ("does topology carry signal, beyond degree?").
+    Edge weights ride along with their (new) destination.
+    """
+    ei = graph.edge_index.copy()
+    w = graph.edge_weight.copy()
+    m = ei.shape[1]
+    if m < 2:
+        return Graph(ei, w, np.asarray(graph.nodes))
+    rng = np.random.default_rng(seed)
+    n_swaps = n_swaps if n_swaps is not None else 10 * m
+    existing = {(int(s), int(d)) for s, d in ei.T}
+    for _ in range(n_swaps):
+        e1, e2 = rng.integers(0, m, size=2)
+        a, b = ei[0, e1], ei[1, e1]
+        c, d = ei[0, e2], ei[1, e2]
+        if a == d or c == b:  # would create a self-loop
+            continue
+        if (int(a), int(d)) in existing or (int(c), int(b)) in existing:  # would multi-edge
+            continue
+        existing.discard((int(a), int(b)))
+        existing.discard((int(c), int(d)))
+        existing.add((int(a), int(d)))
+        existing.add((int(c), int(b)))
+        ei[1, e1], ei[1, e2] = d, b
+        w[e1], w[e2] = w[e2], w[e1]
+    return Graph(ei, w, np.asarray(graph.nodes))
+
+
+def symmetrize(graph: Graph) -> Graph:
+    """Undirected union: for every edge i->j add j->i (correlation is symmetric).
+
+    Applied in the model pipeline, not at construction time, so the directed top-k
+    graph stays available as an explicit ablation.
+    """
+    ei, w = graph.edge_index, graph.edge_weight
+    both = {}
+    for k in range(ei.shape[1]):
+        i, j, wt = int(ei[0, k]), int(ei[1, k]), float(w[k])
+        both[(i, j)] = wt
+        both.setdefault((j, i), wt)
+    if not both:
+        return graph
+    keys = sorted(both)
+    src = np.array([i for i, _ in keys], np.int64)
+    dst = np.array([j for _, j in keys], np.int64)
+    wt = np.array([both[k] for k in keys], np.float32)
+    return Graph(np.vstack([src, dst]), wt, np.asarray(graph.nodes))
+
+
+def add_self_loops(graph: Graph, *, weight: float = 1.0) -> Graph:
+    """Add i->i so a node keeps its own features through message passing (else
+    2-hop aggregation over dense sector cliques washes out the node's own signal)."""
+    n = len(graph.nodes)
+    loops_src = np.arange(n, dtype=np.int64)
+    ei = np.hstack([graph.edge_index, np.vstack([loops_src, loops_src])])
+    w = np.concatenate([graph.edge_weight, np.full(n, weight, np.float32)])
+    return Graph(ei, w, np.asarray(graph.nodes))
+
+
+def in_out_degrees(graph: Graph) -> tuple[np.ndarray, np.ndarray]:
+    """(out_degree, in_degree) per node position -- used to verify the null matches."""
+    n = len(graph.nodes)
+    out = np.bincount(graph.edge_index[0], minlength=n)
+    inn = np.bincount(graph.edge_index[1], minlength=n)
+    return out, inn
