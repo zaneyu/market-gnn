@@ -42,3 +42,29 @@ out-of-sample under purged walk-forward, HAC t-stats, BH-FDR across the grid.
 
 *Interpretation stance:* "the graph doesn't help, and here's the frozen-graph control that
 proves the churn isn't the point" is the finding — not a failure.
+
+## Run 2 — GNN vs matched MLP, real data (the topology test)
+
+Same universe/cadence. GNN ≡ MLP + graph-conv (shared head, ranking loss, purged-val early
+stopping, equal budget). `none` is the integrity check; `correlation` is the real test.
+
+| graph        | model | target | mean IC | HAC t | FDR sig |
+|--------------|-------|--------|---------|-------|---------|
+| none         | mlp   | vol    | +0.483  | 46.8  | yes     |
+| none         | gnn   | vol    | +0.483  | 46.8  | yes     |
+| correlation  | mlp   | vol    | +0.489  | 44.5  | yes     |
+| correlation  | gnn   | vol    | +0.486  | 42.9  | yes     |
+| correlation  | mlp   | ret    | +0.001  | 0.07  | no      |
+| correlation  | gnn   | ret    | +0.009  | 0.49  | no      |
+
+**Read:**
+1. **Integrity check passes on real data:** `none` GNN == MLP to the digit (0.483/0.483) —
+   zeroing the graph recovers the MLP exactly. The A/B is clean.
+2. **Topology adds nothing.** On volatility, message passing over the correlation graph makes
+   it *slightly worse* (0.489 → 0.486) — over-smoothing, as predicted. On returns, both are
+   indistinguishable from zero (GNN +0.009, HAC t 0.49, n.s.).
+
+**Bottom line across both runs:** the graph does not earn its keep on this data — not as a
+frozen or dynamic feature (Run 1), not as GNN topology (Run 2). That is the honest, controlled
+answer. The lead-lag / temporal channel (v2) remains the one untested route by which a graph
+could plausibly help returns.
