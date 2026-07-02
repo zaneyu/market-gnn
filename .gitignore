@@ -20,7 +20,8 @@ htmlcov/
 *.pt
 *.pth
 *.ckpt
-data/
+src/marketgnn/data/cache/
+*.parquet
 artifacts/
 runs/
 wandb/

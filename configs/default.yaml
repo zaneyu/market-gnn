@@ -1,0 +1,29 @@
+# market-gnn run config. `python -m marketgnn.train --config configs/default.yaml`
+# Synthetic factor market by default so it runs offline; flip for a real pull.
+synthetic: true
+
+# ablation grid
+graph_kinds: [correlation, sector, both, rewire, none]   # rewire = degree-preserving null
+models: [ridge]            # add gbm (needs lightgbm), mlp/gnn (need torch)
+targets: [ret, vol]        # returns (hard, H1) + volatility (anchor, H3)
+
+# features / graph
+label_horizon: 5           # trading days ahead for the label
+corr_window: 60            # trailing window for correlation edges
+k: 10                      # neighbours per node
+nbr_lookback: 21           # window for the neighbour-return feature
+warmup: 260                # min history before the first cross-section
+
+# rebalance + purged walk-forward (units = rebalance steps)
+rebal_freq: W              # weekly cadence
+purge_steps: 1             # label horizon in rebalance steps (weekly label ~ 1 step)
+embargo_steps: 2           # extra gap before each test block
+n_test: 26                 # ~half a year of weekly test blocks
+min_train: 160             # first test after ~3y of weekly history
+step: 26
+seed: 0
+
+# --- real-data run (set synthetic: false and fill these) ---
+# tickers: [AAPL, MSFT, ...]   # or load PIT Russell 1000 via data/universe.py
+# start: "2010-01-01"
+# end:   "2024-12-31"

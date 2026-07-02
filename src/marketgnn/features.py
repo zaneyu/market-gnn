@@ -123,6 +123,22 @@ def forward_return(prices: pd.DataFrame, asof, nodes, horizon: int) -> pd.Series
     return fwd
 
 
+def forward_volatility(prices: pd.DataFrame, asof, nodes, horizon: int) -> pd.Series:
+    """Label: log annualized realized volatility over the next ``horizon`` steps.
+
+    The predictable *anchor* target (H3). Reads the future, like ``forward_return``.
+    """
+    if not prices.index.is_unique:
+        raise ValueError("price index must be unique for unambiguous labelling")
+    i = prices.index.get_indexer([asof])[0]
+    if i == -1 or i + horizon >= len(prices.index):
+        return pd.Series(np.nan, index=nodes)
+    fwd = prices.iloc[i : i + horizon + 1].reindex(columns=nodes)
+    daily = fwd.pct_change().iloc[1:]
+    rv = daily.std(ddof=0) * np.sqrt(252)
+    return np.log(rv.replace(0, np.nan))
+
+
 def leakage_canary(y: pd.Series) -> pd.Series:
     """A feature identical to the label. Injected only in tests to prove the
     evaluation *would* light up if the future leaked in."""
