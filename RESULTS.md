@@ -86,3 +86,26 @@ cross-sectionally-normalized features ranks marginally better while producing a 
 level forecast. **Do not oversell the 0.48**: the honest statement is "cross-sectional vol is
 highly persistent; the model adds a modest ranking edge over trailing vol and does not improve
 the calibrated level forecast." (`python -m marketgnn.robustness`)
+
+## Run 4 — point-in-time S&P 500 membership (inclusion-bias correction)
+
+Reconstructed PIT membership from the public S&P 500 change log (Wikipedia) and re-ran with
+each cross-section restricted to as-of members. 7 of the 90 names were added mid-window
+(TSLA 2020-12, AMD 2017-03, PYPL 2015-07, NOW, TMUS, GOOGL, AVGO); universe grows 83 -> 90.
+
+| graph        | target | IC (no membership) | IC (PIT membership) |
+|--------------|--------|--------------------|---------------------|
+| correlation  | ret    | +0.010 (t 0.65)    | +0.008 (t 0.49)     |
+| none         | ret    | +0.010 (t 0.63)    | +0.004 (t 0.25)     |
+| correlation  | vol    | +0.479             | +0.473              |
+| none         | vol    | +0.480             | +0.474              |
+
+**Read:** correcting inclusion timing **shrinks the (already-insignificant) return IC** — a
+small survivorship inflation removed, in the expected direction. Volatility and the core
+conclusion (graph doesn't help) are unchanged.
+
+**LIMITATION (blunt):** this corrects inclusion *timing* for current members. It does NOT
+restore delisted names — yfinance has no prices for them — so the run is inclusion-corrected
+but **not fully survivorship-free**. That needs a vendor with delisted prices (e.g. CRSP).
+The machinery (`apply_delistings`, membership mask) is built and tested; the binding
+constraint is the data source, and it's stated rather than papered over.

@@ -118,3 +118,53 @@ _TICKER_SECTOR = {t: s for s, ts in _SECTORS.items() for t in ts}
 def default_sectors(tickers) -> "pd.Series":
     """Sector label per ticker (approx GICS), 'other' if unknown."""
     return pd.Series({t: _TICKER_SECTOR.get(t, "other") for t in tickers}, name="sector")
+
+
+# --- Point-in-time S&P 500 membership from the public change log ---------------
+
+_WIKI_SP500 = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+
+
+def fetch_sp500_changes() -> "pd.DataFrame":
+    """Long DataFrame of index change events [date, ticker, action] from Wikipedia.
+
+    Needs a browser User-Agent (Wikipedia 403s the default urllib agent). This is
+    inclusion/removal *timing*; it does NOT provide delisted-name prices -- see
+    ``sp500_membership`` for the survivorship caveat.
+    """
+    import io
+    import urllib.request
+
+    req = urllib.request.Request(_WIKI_SP500, headers={"User-Agent": "Mozilla/5.0 (marketgnn research)"})
+    html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8")
+    ch = pd.read_html(io.StringIO(html))[1]
+    ch.columns = ["date", "add_t", "add_s", "rem_t", "rem_s", "reason"]
+    ch["date"] = pd.to_datetime(ch["date"], errors="coerce")
+    events = []
+    for _, r in ch.iterrows():
+        if pd.notna(r["add_t"]):
+            events.append((r["date"], r["add_t"], "add"))
+        if pd.notna(r["rem_t"]):
+            events.append((r["date"], r["rem_t"], "remove"))
+    return pd.DataFrame(events, columns=["date", "ticker", "action"]).dropna(subset=["date"])
+
+
+def sp500_membership(tickers, dates: "pd.DatetimeIndex", changes: "pd.DataFrame | None" = None) -> "pd.DataFrame":
+    """Boolean [date x ticker] membership mask: a name is a member only on/after its
+    most recent S&P 500 *add* date. Corrects forward-looking inclusion bias (e.g.
+    TSLA absent from pre-2020 cross-sections).
+
+    LIMITATION (be honest): this fixes inclusion *timing* for current members. It
+    does NOT restore delisted names -- yfinance lacks their prices -- so a run on a
+    current-member universe is inclusion-corrected but NOT fully survivorship-free.
+    Full survivorship-freedom needs a vendor with delisted prices (e.g. CRSP).
+    """
+    if changes is None:
+        changes = fetch_sp500_changes()
+    adds = changes[changes["action"] == "add"]
+    mask = pd.DataFrame(True, index=dates, columns=list(tickers))
+    for t in tickers:
+        t_adds = adds.loc[adds["ticker"] == t, "date"]
+        if len(t_adds):
+            mask.loc[mask.index < t_adds.max(), t] = False
+    return mask

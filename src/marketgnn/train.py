@@ -95,13 +95,26 @@ def run(config: dict) -> pd.DataFrame:
         min_train=cfg["min_train"], step=cfg["step"],
     )
 
+    membership = None
+    if cfg.get("use_membership") and not cfg.get("synthetic", True):
+        from .data.universe import sp500_membership
+
+        membership = sp500_membership(list(prices.columns), prices.index)
+        print(f"[membership] PIT S&P 500 mask on: universe "
+              f"{int(membership.iloc[0].sum())} -> {int(membership.iloc[-1].sum())} names")
+
     models = [m for m in cfg["models"] if _deps_ok(m) or print(f"[skip] {m}: missing deps")]
+    graph_kinds = cfg["graph_kinds"]
+    if membership is not None and "frozen" in graph_kinds:
+        print("[membership] skipping 'frozen' (assumes constant universe)")
+        graph_kinds = [g for g in graph_kinds if g != "frozen"]
     rows = []
-    for gk in cfg["graph_kinds"]:
+    for gk in graph_kinds:
         ds = build_dataset(
             prices, volume, sectors, market, rebal, graph_kind=gk,
             label_horizon=cfg["label_horizon"], corr_window=cfg["corr_window"],
             k=cfg["k"], nbr_lookback=cfg["nbr_lookback"], warmup=cfg["warmup"],
+            membership=membership,
         )
         val_gap = cfg["purge_steps"] + cfg["embargo_steps"]
         for model_name, target in product(models, cfg["targets"]):
