@@ -15,13 +15,17 @@ from .evaluate import newey_west_tstat, two_sided_p
 
 
 def _ar1(n, phi, mean, sd, rng):
+    # AR(1) with the target mean as a genuine offset. Do NOT re-center to the
+    # sample mean: that would pin the t-stat numerator to effect/se on every draw,
+    # making the numerator deterministic and the "power" a near-step function
+    # (understated at small effects, overstated at large). The sampling variation
+    # in the mean is exactly what a Monte-Carlo power estimate must keep.
     e = rng.normal(0, sd, size=n)
     x = np.empty(n)
     x[0] = e[0]
     for t in range(1, n):
         x[t] = phi * x[t - 1] + e[t]
-    x = x - x.mean() + mean
-    return x
+    return x + mean
 
 
 def power(
@@ -51,11 +55,20 @@ def min_detectable_effect(
     *, n_dates: int, target_power: float = 0.8, ic_sd: float = 0.08, phi: float = 0.4, **kw
 ) -> float:
     """Smallest mean IC gap detectable at ``target_power`` (bisection over effect)."""
-    lo, hi = 0.0, 0.2
+    cap = 0.2
+    lo, hi = 0.0, cap
     for _ in range(24):
         mid = (lo + hi) / 2
         if power(mid, n_dates=n_dates, ic_sd=ic_sd, phi=phi, **kw) < target_power:
             lo = mid
         else:
             hi = mid
+    if hi >= cap - 1e-6 and power(cap, n_dates=n_dates, ic_sd=ic_sd, phi=phi, **kw) < target_power:
+        import warnings
+
+        warnings.warn(
+            f"target power {target_power} not reached even at IC gap {cap}; "
+            f"study is underpowered at n_dates={n_dates} (returning the cap).",
+            stacklevel=2,
+        )
     return hi

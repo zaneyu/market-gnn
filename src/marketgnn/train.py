@@ -52,14 +52,15 @@ def _deps_ok(model: str) -> bool:
     return True
 
 
-def _fold_predictions(model_name, dataset, cv, target, seed):
+def _fold_predictions(model_name, dataset, cv, target, seed, val_gap=1):
     """Concatenate out-of-sample test predictions across all folds for one cell."""
     y = dataset.y_ret if target == "ret" else dataset.y_vol
     is_neural = model_name in ("mlp", "gnn")
+    extra = {"val_gap": val_gap} if is_neural else {}
     preds, targs, dts = [], [], []
     for fold in cv.split(dataset.dates):
         tr, te = list(fold.train_dates), list(fold.test_dates)
-        model = build_model(model_name, seed=seed)
+        model = build_model(model_name, seed=seed, **extra)
         if is_neural:
             model.fit(dataset, tr, target=target)
             p = model.predict(dataset, te)
@@ -102,8 +103,9 @@ def run(config: dict) -> pd.DataFrame:
             label_horizon=cfg["label_horizon"], corr_window=cfg["corr_window"],
             k=cfg["k"], nbr_lookback=cfg["nbr_lookback"], warmup=cfg["warmup"],
         )
+        val_gap = cfg["purge_steps"] + cfg["embargo_steps"]
         for model_name, target in product(models, cfg["targets"]):
-            pred, targ, dts = _fold_predictions(model_name, ds, cv, target, cfg["seed"])
+            pred, targ, dts = _fold_predictions(model_name, ds, cv, target, cfg["seed"], val_gap=val_gap)
             ic = per_date_ic(pred, targ, dts)
             s = ic_summary(ic, hac_lag=cfg["purge_steps"])
             lo, hi = block_bootstrap_ci(ic.dropna().to_numpy(), block=max(2, cfg["purge_steps"] + 1), seed=cfg["seed"])

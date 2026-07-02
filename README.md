@@ -30,13 +30,13 @@ pytest tests/test_leakage_canary.py -q
 Plus point-in-time purity of the graph, features, and neighbour signal
 (`tests/test_graph_pit.py`, `test_features_pit.py`, `test_neighbor_feature.py`), exact
 purge/embargo correctness (`test_splits.py`), and per-date-only normalization
-(`test_normalize_scope.py`). **34 tests, no GNN stack required.**
+(`test_normalize_scope.py`). **40 tests (2 GNN A/B tests skip without torch); the core harness needs no GNN stack.**
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 34 tests, ~5s
+pytest -q                        # 40 tests (38 without torch), ~10s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -88,7 +88,7 @@ return claims require the PIT path.**
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[stub])
                 data/   (download · universe)
-tests/          34 tests — the leak/PIT/purge/stat harness
+tests/          40 tests — the leak/PIT/purge/stat harness
 configs/        default.yaml
 paper/note.md   writeup (incl. "the result I almost believed")
 ```

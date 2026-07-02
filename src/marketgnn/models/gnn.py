@@ -53,10 +53,12 @@ class NeuralModel:
     """Trains one net across all dates with the shared ranking loss and early
     stopping on a time-held-out (purged) tail of the training dates."""
 
-    def __init__(self, *, use_graph=True, hidden=32, layers=2, lr=1e-3, epochs=200, patience=20, val_frac=0.2, seed=0):
+    def __init__(self, *, use_graph=True, hidden=32, layers=2, lr=1e-3, epochs=200, patience=20,
+                 val_frac=0.2, val_gap=1, seed=0):
         self.use_graph = use_graph
         self.hidden, self.layers = hidden, layers
         self.lr, self.epochs, self.patience, self.val_frac = lr, epochs, patience, val_frac
+        self.val_gap = val_gap  # rebalance steps dropped between train and val (purge)
         self.seed = seed
         self.net = None
 
@@ -91,8 +93,10 @@ class NeuralModel:
 
         train_dates = list(train_dates)
         cut = max(1, int(len(train_dates) * (1 - self.val_frac)))
+        # Purge the val split like everything else: drop val_gap steps between the
+        # train tail and the val head so the last train label can't overlap val.
         tr = self._date_tensors(dataset, train_dates[:cut], target, device)
-        va = self._date_tensors(dataset, train_dates[cut:], target, device)
+        va = self._date_tensors(dataset, train_dates[cut + self.val_gap :], target, device)
         if not tr:
             return self
 

@@ -62,8 +62,17 @@ def make_graph(kind, returns, sectors, asof, nodes, *, corr_window, k, seed=0):
     if kind == "both":
         c = G.correlation_knn(returns, asof, nodes, window=corr_window, k=k)
         s = G.sector_graph(sectors, nodes, max_degree=k)
-        ei = np.hstack([c.edge_index, s.edge_index])
-        w = np.concatenate([c.edge_weight, s.edge_weight])
+        # Dedup parallel edges: a neighbour reached by BOTH edge types must count
+        # once, else neighbor_return_feature double-counts it (biasing nbr_ret).
+        merged: dict = {}
+        for gi in (c, s):
+            for idx in range(gi.num_edges):
+                merged.setdefault((int(gi.edge_index[0, idx]), int(gi.edge_index[1, idx])), float(gi.edge_weight[idx]))
+        if not merged:
+            return G.Graph(np.zeros((2, 0), np.int64), np.zeros(0, np.float32), np.asarray(nodes))
+        keys = list(merged)
+        ei = np.array([[a for a, _ in keys], [b for _, b in keys]], np.int64)
+        w = np.array([merged[key] for key in keys], np.float32)
         return G.Graph(ei, w, np.asarray(nodes))
     if kind == "random":  # weak null (avg-degree matched)
         real = G.correlation_knn(returns, asof, nodes, window=corr_window, k=k)

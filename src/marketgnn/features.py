@@ -51,7 +51,7 @@ def compute_features(
     out["mom_1m"] = perf(21)
     out["mom_3m"] = perf(63)
     # True 12-1 momentum: return from t-252 to t-21 (skips the recent month).
-    out["mom_12_1"] = (px.iloc[-22] / px.iloc[-253] - 1) if len(px) > 253 else np.nan
+    out["mom_12_1"] = (px.iloc[-22] / px.iloc[-253] - 1) if len(px) >= 253 else np.nan
     out["rev_1w"] = perf(5)
     out["vol_20d"] = rets.iloc[-20:].std() * np.sqrt(252)
     out["turnover"] = np.log(dollar.iloc[-20:].mean().replace(0, np.nan))
