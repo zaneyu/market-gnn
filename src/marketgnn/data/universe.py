@@ -97,6 +97,8 @@ def default_universe() -> list[str]:
     return list(DEFAULT_UNIVERSE)
 
 
+
+
 # Honest (approximate GICS) sector labels for the default universe, so the sector
 # graph is real structure rather than a placeholder. Static, as sectors should be.
 _SECTORS = {
@@ -118,6 +120,33 @@ _TICKER_SECTOR = {t: s for s, ts in _SECTORS.items() for t in ts}
 def default_sectors(tickers) -> "pd.Series":
     """Sector label per ticker (approx GICS), 'other' if unknown."""
     return pd.Series({t: _TICKER_SECTOR.get(t, "other") for t in tickers}, name="sector")
+
+
+# Extended universe: ~90 additional mid/large names, ALL public before 2014 (no IPO
+# gaps over the window), spanning well below the mega-caps in liquidity. Widens the
+# liquidity range (for liquidity-conditioned tests) and gives every experiment more
+# cross-sectional power. Still current-membership -> survivorship caveat unchanged.
+_EXTENDED = {
+    "tech": ["AKAM", "FFIV", "JNPR", "NTAP", "STX", "WDC", "SWKS", "MCHP", "TER", "ZBRA",
+             "PTC", "ANSS", "CDW", "JKHY", "TYL", "BR", "PAYX", "FAST"],
+    "healthcare": ["WAT", "MTD", "IDXX", "RMD", "ZBH", "BAX", "HOLX", "DGX", "LH", "STE", "XRAY", "UHS"],
+    "industrials": ["AOS", "NDSN", "DOV", "ROK", "EXPD", "JBHT", "CHRW", "PNR", "IEX", "SNA", "SWK", "PH", "ITW"],
+    "consumer_disc": ["WHR", "LEG", "MHK", "HAS", "RL", "TPR", "PVH", "DPZ", "GRMN", "POOL", "WYNN", "MGM"],
+    "consumer_staples": ["CLX", "CHD", "HRL", "MKC", "SJM", "CAG", "K", "GIS", "HSY", "KMB", "TSN", "TAP"],
+    "financials": ["CINF", "L", "MKL", "WRB", "AFL", "ALL", "TRV", "PGR", "HIG", "FITB", "KEY", "RF", "HBAN", "CFG"],
+    "materials": ["ALB", "CF", "MOS", "FMC", "NUE", "STLD", "IP", "PKG", "SEE", "ECL", "PPG", "SHW", "NEM", "FCX"],
+    "energy": ["HAL", "OXY", "DVN", "HES", "APA", "BKR", "WMB", "OKE", "KMI"],
+}
+for _s, _ts in _EXTENDED.items():
+    for _t in _ts:
+        _TICKER_SECTOR.setdefault(_t, _s)
+
+
+def extended_universe() -> list[str]:
+    """~180 names (large + mid caps, all public pre-2014) for higher power and a
+    genuine liquidity range. Deduplicated, order-stable."""
+    extra = [t for ts in _EXTENDED.values() for t in ts]
+    return list(dict.fromkeys(list(DEFAULT_UNIVERSE) + extra))
 
 
 # --- Point-in-time S&P 500 membership from the public change log ---------------

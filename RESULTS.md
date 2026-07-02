@@ -173,7 +173,29 @@ statistical effect (real return signal exists) that is **arbitraged net of costs
 control, not a tradable strategy. Momentum_12-1 has lower turnover (breakeven ~12 bps) but isn't
 statistically significant here. Reporting the effect *and* exactly where costs kill it is the point.
 
-## Headline (six runs)
+## Run 7 — extended universe (194 names) + liquidity-conditioned reversal
+
+Widened to ~180 mid/large names (all public pre-2014, so no IPO gaps), giving a real
+liquidity range and more power. Short-term reversal is documented to be an illiquidity /
+arbitrage-cost effect, so it should concentrate in less-liquid names. Split each cross-section
+into liquidity terciles (trailing dollar volume): `python -m marketgnn.conditioning`
+
+| liquidity tercile | mean IC | HAC t | p       |
+|-------------------|---------|-------|---------|
+| least liquid      | +0.0193 | 4.18  | <0.001  |
+| mid               | +0.0198 | 3.96  | <0.001  |
+| most liquid       | +0.0132 | 2.83  | 0.005   |
+| **low − high spread** | **+0.0061** | **1.45** | **0.15** |
+
+**Read — honestly nuanced.** Reversal is **significant across all liquidity terciles** on 194
+names (stronger t-stats than the 90-name run — power gained). It is directionally weaker in the
+most-liquid names, but the **low-minus-high gradient is *not* statistically significant** (p 0.15).
+So the illiquidity-concentration hypothesis is **not confirmed** here — expected, because even the
+"least liquid" tercile of a mid/large-cap universe is still fairly liquid; the documented gradient
+lives in genuinely small/illiquid names this set still excludes. Refusing to claim the gradient it
+doesn't support is the point. Figures: `figures/reversal_by_liquidity.png`, `reversal_cost_decay.png`.
+
+## Headline (seven runs)
 
 The contemporaneous graph is a **red herring** (Runs 1-2: frozen ≈ dynamic ≈ none; GNN ≈ MLP).
 The lead-lag channel — the only one that *should* carry return signal — is a **powered null on

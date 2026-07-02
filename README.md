@@ -42,6 +42,15 @@ cost-fragile — and this repo is the harness that separates a real effect from 
 overlap / over-smoothing artifacts that make graph "alpha" look real.
 Full decomposition and numbers in [RESULTS.md](RESULTS.md).
 
+The reversal effect is real gross but dies at ~1 bp of cost, and (on a 194-name universe) is
+significant across liquidity terciles without a significant illiquidity gradient:
+
+<p align="center">
+  <img src="figures/reversal_cost_decay.png" width="46%" alt="Reversal Sharpe vs transaction cost">
+  &nbsp;
+  <img src="figures/reversal_by_liquidity.png" width="46%" alt="Reversal rank-IC by liquidity tercile">
+</p>
+
 ## Why trust the null? The harness has teeth.
 
 A null is only worth reporting if the pipeline could have found signal. Two guarantees:
@@ -52,14 +61,14 @@ A null is only worth reporting if the pipeline could have found signal. Two guar
   purity of graph/features/labels is asserted, not assumed.
 
 ```bash
-pytest -q     # 52 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
+pytest -q     # 53 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 52 tests (50 without torch), ~28s
+pytest -q                        # 53 tests (51 without torch), ~30s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -107,6 +116,11 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
 - **Costs** (`costs.py`) — the decile long-short a signal implies, net of transaction costs:
   breakeven bps and net Sharpe. Turns "cost-fragile" into a number (reversal breaks even at
   ~0.9 bp → arbitraged net). A gross IC without this is how backtests lie.
+- **Conditioning** (`conditioning.py`) — liquidity-tercile analysis: is reversal an
+  illiquidity effect? A HAC test on the low-minus-high IC spread, over a widened ~180-name
+  universe (`data/universe.extended_universe`) for real liquidity range and power.
+- **Figures** (`figures.py`) — the reversal-by-liquidity gradient and the cost-decay curve
+  as PNGs (`figures/`), because visual evidence lands harder than tables.
 - **Economic-link edges** (`graph.edges_from_pairs`) — drop-in for a *real* linkage graph
   (supplier–customer from 10-Ks, shared-analyst, 13F co-holding): provide a link CSV and the
   lead-lag experiment runs on true economic links instead of the correlation/industry proxy.
@@ -125,10 +139,10 @@ return claims require the PIT path.**
 ## Layout
 
 ```
-src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · train
+src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[stub])
                 data/   (download · universe[PIT membership])
-tests/          52 tests — leak/PIT/stat/power/lead-lag/positive-control/cost harness
+tests/          53 tests — leak/PIT/stat/power/lead-lag/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```

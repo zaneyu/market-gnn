@@ -21,7 +21,8 @@ dependencies = [
 # WITHOUT the heavy GNN stack. These extras are for actually training models.
 gnn = ["torch>=2.1", "torch-geometric>=2.4"]
 gbm = ["lightgbm>=4.0"]
-data = ["yfinance>=0.2.40", "pyarrow>=14.0"]
+data = ["yfinance>=0.2.40", "pyarrow>=14.0", "lxml>=5.0"]
+viz = ["matplotlib>=3.7"]
 dev = ["pytest>=7.4"]
 
 [tool.setuptools.packages.find]
