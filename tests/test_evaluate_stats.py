@@ -62,3 +62,12 @@ def test_hac_does_not_over_reject_pure_noise():
 
 def test_long_short_spread_nan_on_constant_predictions():
     assert np.isnan(long_short_spread(np.ones(50), np.random.default_rng(0).normal(size=50)))
+
+
+def test_qlike_minimized_at_perfect_forecast():
+    from marketgnn.evaluate import qlike
+    rng = np.random.default_rng(0)
+    realized = rng.uniform(0.01, 0.5, size=200)
+    assert abs(qlike(realized, realized)) < 1e-9           # perfect forecast -> 0
+    assert qlike(realized, realized * 2) > 0               # wrong forecast -> positive
+    assert qlike(realized, realized * 0.5) > 0

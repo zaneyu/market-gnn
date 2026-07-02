@@ -68,3 +68,21 @@ stopping, equal budget). `none` is the integrity check; `correlation` is the rea
 frozen or dynamic feature (Run 1), not as GNN topology (Run 2). That is the honest, controlled
 answer. The lead-lag / temporal channel (v2) remains the one untested route by which a graph
 could plausibly help returns.
+
+## Run 3 — volatility robustness: model vs naive random-walk forecast
+
+Is the ~0.48 vol IC real skill or just volatility persistence? Compared ridge against the
+naive forecast "forward vol = trailing 20d vol" on the same OOS observations.
+
+| metric              | model  | naive  | delta   |
+|---------------------|--------|--------|---------|
+| rank-IC             | +0.479 | +0.435 | +0.044  |
+| QLIKE (lower=better)| 1.79   | 0.658  | +1.13   |
+
+**Read:** the naive forecast alone gets **0.435 of the 0.479** — ~90% of the vol
+"predictability" is just **volatility persistence**, not model skill. The model adds a small,
+genuine ranking increment (**+0.044**) but is **worse on level accuracy (QLIKE)** — ridge on
+cross-sectionally-normalized features ranks marginally better while producing a badly-scaled
+level forecast. **Do not oversell the 0.48**: the honest statement is "cross-sectional vol is
+highly persistent; the model adds a modest ranking edge over trailing vol and does not improve
+the calibrated level forecast." (`python -m marketgnn.robustness`)

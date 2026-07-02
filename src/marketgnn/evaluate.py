@@ -155,6 +155,19 @@ def benjamini_hochberg(pvalues, alpha: float = 0.05):
     return reject, qvals
 
 
+def qlike(realized_var, forecast_var) -> float:
+    """QLIKE loss (lower is better; 0 iff forecast == realized), the standard
+    proper loss for variance forecasts and robust to noise in the realized proxy.
+    QLIKE = mean( r/f - log(r/f) - 1 ) over positive, finite (realized, forecast)."""
+    r = np.asarray(realized_var, float)
+    f = np.asarray(forecast_var, float)
+    mask = np.isfinite(r) & np.isfinite(f) & (r > 0) & (f > 0)
+    if mask.sum() == 0:
+        return np.nan
+    ratio = r[mask] / f[mask]
+    return float(np.mean(ratio - np.log(ratio) - 1))
+
+
 def two_sided_p(t_stat: float) -> float:
     """Normal-approx two-sided p-value from a (HAC) t-stat."""
     if not np.isfinite(t_stat):
