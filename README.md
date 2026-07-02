@@ -101,6 +101,9 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   and the own-momentum control. This is the experiment that makes the null a *result*.
 - **Robustness** (`robustness.py`) — vol model vs the naive random-walk forecast (rank-IC and
   QLIKE), showing how much of the vol IC is mere persistence.
+- **Signals** (`signals.py`) — real-data positive controls: textbook anomalies (short-term
+  reversal, 12-1 momentum) run through the same harness, so a graph null is provably a real
+  absence rather than a pipeline that finds nothing.
 
 ## Data & survivorship (read before trusting return claims)
 
@@ -113,7 +116,7 @@ return claims require the PIT path.**
 ## Layout
 
 ```
-src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · train
+src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[stub])
                 data/   (download · universe[PIT membership])
 tests/          47 tests — leak/PIT/purge/stat/power/lead-lag/positive-control harness
