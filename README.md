@@ -11,32 +11,48 @@ question:
 > feature set fed to a matched non-graph model**, after point-in-time construction and
 > purged walk-forward evaluation?
 
-The honest answer may be "only for volatility, not returns." That's fine — the point is
-to measure it without fooling ourselves. Everything here is built so a skeptic can clone
-it, run it, and watch the leak-detectors fire.
+## Findings (real data: 90 large-caps, 2014–2024, weekly)
 
-## Does the evaluation actually catch leaks? (run this first)
+Tested every configuration by which a graph could plausibly add cross-sectional **return**
+signal, and decomposed where the apparent "graph alpha" actually comes from:
 
-The whole result is only worth trusting if the harness has teeth. Two tests prove it:
+1. **Contemporaneous graph is a red herring.** Frozen ≈ dynamic ≈ *no graph* for a linear
+   model; the GNN ties the matched MLP (and is slightly worse — over-smoothing). Same-date
+   message passing can't carry return signal, and doesn't.
+2. **Lead-lag / spillover is a *powered* null on large-caps.** Neighbours' past returns →
+   own future return (the channel Cohen–Frazzini / industry-momentum predicts). We first
+   **plant** the effect in a synthetic market and show the pipeline **recovers it** (IC 0.089,
+   HAC t 9.6, rewire-null clean) — proving power — then on real data find ~0.006 with **80%
+   power to detect 0.036**. Absent, not undetectable; consistent with the effect living in
+   small/illiquid names this universe excludes.
+3. **The vol "predictability" is ~90% persistence** — a naive trailing-vol forecast gets 0.435
+   of the model's 0.479, and the model is *worse* on QLIKE (level calibration).
+4. **Survivorship inflates it:** point-in-time membership correction shrinks the already-null
+   return IC.
+
+**Net:** on this universe, no graph configuration adds return signal that survives leak-free,
+powered, control-checked evaluation — and this repo is the harness that separates a real effect
+from the survivorship / overlap / over-smoothing artifacts that make graph "alpha" look real.
+Full decomposition and numbers in [RESULTS.md](RESULTS.md).
+
+## Why trust the null? The harness has teeth.
+
+A null is only worth reporting if the pipeline could have found signal. Two guarantees:
+- **It detects signal when present** — the planted lead-lag recovery above, and a
+  **future-injection canary** (feed a feature = tomorrow's return → IC spikes to ~1.0).
+- **It rejects spurious signal** — **label-shuffle** collapses IC to ~0; the **degree-preserving
+  rewire** null stays flat; **purged walk-forward** removes label-overlap leakage; point-in-time
+  purity of graph/features/labels is asserted, not assumed.
 
 ```bash
-pytest tests/test_leakage_canary.py -q
+pytest -q     # 45 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
 ```
-- **Future-injection canary** — feed the model a feature equal to *tomorrow's return*;
-  IC must spike to ~1.0 (the detector fires).
-- **Label-shuffle** — scramble the targets within each date; IC must collapse to ~0
-  (a real score can't survive it).
-
-Plus point-in-time purity of the graph, features, and neighbour signal
-(`tests/test_graph_pit.py`, `test_features_pit.py`, `test_neighbor_feature.py`), exact
-purge/embargo correctness (`test_splits.py`), and per-date-only normalization
-(`test_normalize_scope.py`). **40 tests (2 GNN A/B tests skip without torch); the core harness needs no GNN stack.**
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 40 tests (38 without torch), ~10s
+pytest -q                        # 45 tests (43 without torch), ~25s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -73,6 +89,11 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   horizon overlaps the test window are removed.
 - **Power** (`power.py`) — minimum detectable IC gap given cadence and autocorrelation, so
   a null is distinguishable from "underpowered."
+- **Lead-lag** (`leadlag.py`) — the strictly-lagged neighbour-momentum signal (neighbours'
+  past → own future), a **planted-signal recovery** proving the pipeline detects spillover,
+  and the own-momentum control. This is the experiment that makes the null a *result*.
+- **Robustness** (`robustness.py`) — vol model vs the naive random-walk forecast (rank-IC and
+  QLIKE), showing how much of the vol IC is mere persistence.
 
 ## Data & survivorship (read before trusting return claims)
 
@@ -85,20 +106,23 @@ return claims require the PIT path.**
 ## Layout
 
 ```
-src/marketgnn/  splits · graph · features · evaluate · dataset · power · train
+src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[stub])
-                data/   (download · universe)
-tests/          40 tests — the leak/PIT/purge/stat harness
+                data/   (download · universe[PIT membership])
+tests/          45 tests — leak/PIT/purge/stat/power/lead-lag harness
 configs/        default.yaml
-paper/note.md   writeup (incl. "the result I almost believed")
+paper/note.md   writeup
 ```
 
 ## Roadmap
 
-Static, contemporaneous graph only (this repo). The lead-lag / momentum-spillover channel
-is inherently temporal (neighbour's return today → mine tomorrow) and is the documented
-**v2**: a GConvGRU-style spatiotemporal model. Deferred deliberately — a finished, tight
-static study beats a half-built temporal one.
+Both graph channels are now tested: contemporaneous (Runs 1–2) and strictly-lagged spillover
+(Run 5, zero-parameter so nothing to overfit). Natural extensions: (1) a true economic-link
+graph (supplier/customer from 10-K segments, shared-analyst coverage) in place of the
+correlation/industry proxy — the lead-lag literature's effect is strongest there; (2) a
+small/illiquid universe where that effect is documented to survive; (3) delisted-price data
+(CRSP) for a fully survivorship-free PIT run; (4) a GConvGRU spatiotemporal model — though the
+zero-parameter lead-lag signal is the stronger test of *whether linkage carries information*.
 
 ## License
 

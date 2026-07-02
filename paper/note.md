@@ -1,64 +1,69 @@
-# Does graph structure add cross-sectional equity signal? A leak-controlled test
+# Does graph structure add cross-sectional equity return signal? A leak-controlled decomposition
 
-*Working note. Status: pipeline complete on synthetic data; real-data run pending.*
+*Working note. Status: complete on a liquid large-cap universe; economic-link edges and a
+survivorship-free universe are noted extensions.*
 
 ## Abstract
-We test whether modelling stocks as a graph and applying a GNN yields higher
-out-of-sample cross-sectional rank-IC than a matched non-graph model, under
-point-in-time construction and purged walk-forward evaluation. Primary endpoint
-(pre-registered): GNN vs matched MLP on next-period return rank. Secondary:
-volatility target, edge-type ablations, and a degree-preserving random-graph
-control. All significance uses HAC t-stats and a block bootstrap; the grid is
-FDR-controlled.
+We ask whether modelling stocks as a graph adds out-of-sample cross-sectional rank-IC over a
+matched non-graph model, under point-in-time construction and purged walk-forward evaluation.
+We test **both** channels by which a graph could carry return signal — contemporaneous
+(same-date message passing) and strictly-lagged spillover (neighbours' past → own future) —
+and validate detection power by recovering a *planted* lead-lag effect on synthetic data
+before interpreting the real-data result. On 90 liquid US large-caps (2014–2024, weekly), no
+configuration adds return signal that survives leak-free, powered, control-checked evaluation.
+The contribution is the decomposition and the harness that separates a real effect from the
+survivorship / label-overlap / over-smoothing artifacts that make graph "alpha" look real.
 
-## 1. Data & universe
-- Russell 1000, **point-in-time membership** (survivorship defense); delisting
-  returns patched so the label window is complete.
-- Daily OHLCV (yfinance, adjusted), weekly rebalance. Beta vs **SPY** (exogenous),
-  never a survivor equal-weight mean.
-- *Limitation to state plainly:* data-vendor adjustment quality; current-membership
-  fallback (if used) restricts return claims to the volatility target.
+## 1. Data
+Daily adjusted OHLCV (yfinance), 90 large-caps, weekly rebalance, 5-day-ahead labels. Beta vs
+SPY (exogenous). Point-in-time S&P 500 membership from the public change log corrects
+inclusion timing. *Limitation:* delisted-name prices are unavailable via yfinance, so the
+real-data run is inclusion-corrected but not fully survivorship-free (needs CRSP); the primary
+*mechanistic* evidence is therefore the synthetic planted-signal recovery.
 
-## 2. Graph construction
-Point-in-time per date: trailing-correlation kNN (window W, top-k |corr|) and sector
-co-membership. Model applies symmetrize + self-loops. **Null:** degree-sequence-
-preserving rewire (matches in/out-degree exactly) — isolates topology from degree.
+## 2. Method
+- **Graphs** (point-in-time): trailing-correlation kNN (raw, shrinkage, frozen), sector
+  (industry), degree-preserving rewire null.
+- **Contemporaneous test:** ridge/LightGBM with a neighbour-return feature, and the GNN≡MLP
+  A/B (same net, edges on/off; shared ranking loss + purged-val early stopping).
+- **Lead-lag test:** zero-parameter signal = edge-weighted mean of neighbours' return over
+  (t−h, t], predicting own return over (t, t+h]; own-momentum residual control; rewire null.
+- **Evaluation:** per-date rank-IC → Newey–West HAC t-stats, block bootstrap, BH-FDR;
+  minimum-detectable-effect reported next to every null.
 
-## 3. Features
-Momentum (1m/3m/12-1), reversal (1w), realized vol, turnover, beta(SPY), size, and a
-neighbour-aggregated trailing-return feature (the contemporaneous relative-strength
-channel, consumed by both models). Cross-sectional normalization per date.
+## 3. Results
+See RESULTS.md for full tables. Summary:
 
-## 4. Models
-Ridge, LightGBM (tough baseline), and the GNN≡MLP pair (same net, edges on/off),
-shared ranking loss + head + purged-val early stopping.
+- **Run 1–2 — contemporaneous graph is a red herring.** Frozen ≈ dynamic ≈ no-graph (ridge);
+  GNN == MLP with no edges (to the digit), and slightly worse with the correlation graph
+  (over-smoothing). Returns null; volatility significant but see Run 3.
+- **Run 3 — volatility is ~90% persistence.** Naive trailing-vol forecast gets rank-IC 0.435
+  of the model's 0.479, and the model is worse on QLIKE (level). Not model skill.
+- **Run 4 — survivorship inflates returns.** PIT inclusion correction shrinks the already-null
+  return IC in the expected direction.
+- **Run 5 — lead-lag is a powered null.** Planted-signal recovery: over the true graph the
+  pipeline recovers IC 0.089 (HAC t 9.6), survives the own-momentum control, and the rewire
+  null is flat — proving power. On real data: IC ~0.006 with 80% power to detect 0.036.
 
-## 5. Evaluation
-Purged, embargoed walk-forward. Per-date rank-IC → HAC t-stat + IC-IR, decile
-long-short spread, turnover; volatility via QLIKE vs naive. Block-bootstrap CIs,
-multi-seed variance, BH-FDR across the grid. Power/MDE reported.
+## 4. Interpretation
+On liquid large-caps, no graph configuration adds cross-sectional return signal. This is
+consistent with the lead-lag literature, where spillover predictability concentrates in
+small/illiquid names (excluded here by construction) and has decayed post-2000. The
+contemporaneous "graph effect" people report is, in this decomposition, attributable to
+survivorship, label overlap, and the graph-derived feature — not topology.
 
-## 6. Results
-*(populate from the real-data run)*
-- H3 anchor (volatility): all models beat naive — pipeline validated.
-- H1 (returns): GNN vs MLP — report effect, HAC t, CI, and whether it clears FDR.
-- H2 (control): real graph vs degree-preserving rewire.
-- H4 (edge type): correlation vs sector vs both (FDR-controlled).
+## 5. What would change the conclusion
+A true economic-link graph (supplier/customer, shared-analyst) on a small/illiquid,
+survivorship-free universe is the setting where the lead-lag channel is documented to survive.
+The harness is built to test exactly that; the binding constraints are edge and price data.
 
-## 7. The result I almost believed
-*(the centerpiece — fill in as it happens)* The first number that looked great, the
-specific test/control that revealed it was leakage or survivorship, and the corrected
-number. This is the honest core of the note: skepticism → test → kill → report.
+## 6. Threats to validity
+Large-cap-only (by design); yfinance adjustment quality and non-reproducibility of the live
+pull (synthetic evidence is deterministic); transaction costs excluded (predictability study);
+weekly cadence power (mitigated by reporting MDE).
 
-## 8. Limitations & threats to validity
-Power on weekly cadence; residual look-ahead in sector labels; transaction costs
-excluded (predictability study, not a strategy); vendor data quality.
-
-## 9. Reproducibility
-`pip install -e ".[dev,gnn]"`; `pytest -q`; `python -m marketgnn.train --config
-configs/default.yaml`. Seeds fixed; data cached; every leakage control is a runnable test.
-
-## Appendix: expected honest outcome
-Graph adds small-but-real IC for volatility, marginal-to-none for returns after
-controls; sector edges ≥ correlation edges; GBM is a hard baseline. Reporting that —
-with the control that dissolves any naive positive — is the contribution.
+## 7. Reproducibility
+`pip install -e ".[dev,gnn]"`; `pytest -q` (45 tests); `python -m marketgnn.leadlag
+--synthetic-planted` (planted recovery); `python -m marketgnn.train --synthetic`. Every
+leak/PIT/power control is a runnable test; the planted-signal recovery is the load-bearing
+demonstration that the null is powered, not empty.

@@ -36,6 +36,7 @@ DEFAULTS = dict(
     n_test=26,
     min_train=160,
     step=26,
+    hac_lag=None,  # None -> Newey-West rule of thumb (~5 at n~300); honest for overlapping labels
     seed=0,
 )
 
@@ -120,7 +121,7 @@ def run(config: dict) -> pd.DataFrame:
         for model_name, target in product(models, cfg["targets"]):
             pred, targ, dts = _fold_predictions(model_name, ds, cv, target, cfg["seed"], val_gap=val_gap)
             ic = per_date_ic(pred, targ, dts)
-            s = ic_summary(ic, hac_lag=cfg["purge_steps"])
+            s = ic_summary(ic, hac_lag=cfg["hac_lag"])
             lo, hi = block_bootstrap_ci(ic.dropna().to_numpy(), block=max(2, cfg["purge_steps"] + 1), seed=cfg["seed"])
             rows.append({
                 "graph": gk, "model": model_name, "target": target,

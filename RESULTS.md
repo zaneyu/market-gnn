@@ -109,3 +109,52 @@ restore delisted names — yfinance has no prices for them — so the run is inc
 but **not fully survivorship-free**. That needs a vendor with delisted prices (e.g. CRSP).
 The machinery (`apply_delistings`, membership mask) is built and tested; the binding
 constraint is the data source, and it's stated rather than papered over.
+
+## Run 5 — the lead-lag / spillover channel (the one that should carry return signal)
+
+Runs 1-2 tested the *contemporaneous* graph — the configuration that structurally cannot
+carry return signal. The channel that can is **lead-lag / momentum spillover**: neighbours'
+*past* returns predicting a name's *future* return (Cohen-Frazzini economic links,
+Menzly-Ozbas cross-industry lead-lag, Moskowitz-Grinblatt industry momentum). Signal at t =
+edge-weighted mean of neighbours' return over (t-h, t]; target = own return over (t, t+h].
+Zero parameters — nothing to overfit.
+
+**First, prove the pipeline can detect it (planted-signal recovery, synthetic).** A synthetic
+market with a *planted* block-lead-lag effect: `python -m marketgnn.leadlag --synthetic-planted`
+
+| edges  | signal        | mean IC | HAC t | MDE₈₀ | FDR sig |
+|--------|---------------|---------|-------|-------|---------|
+| sector | leadlag       | +0.089  | 9.59  | 0.033 | **yes** |
+| sector | leadlag_resid | +0.085  | 9.47  | 0.033 | **yes** |
+| rewire | leadlag       | −0.001  | −0.49 | 0.029 | no      |
+
+The pipeline **recovers** the planted effect over the true graph (well above MDE), it
+**survives** the own-momentum control (`_resid`), and the degree-preserving **rewire null
+finds nothing**. So a null on real data means *absent*, not *undetectable*.
+
+**Then real data (90 large-caps, 2014-2024, weekly):**
+
+| edges       | signal        | mean IC | HAC t | MDE₈₀ | FDR sig |
+|-------------|---------------|---------|-------|-------|---------|
+| sector      | leadlag       | +0.006  | 0.64  | 0.036 | no      |
+| sector      | leadlag_resid | +0.008  | 1.17  | 0.029 | no      |
+| correlation | leadlag       | −0.008  | −0.75 | 0.043 | no      |
+| rewire      | leadlag       | +0.000  | −0.01 | 0.019 | no      |
+
+**Read — a POWERED null, which is the actual result:** we had 80% power to detect an IC of
+0.036 (the lead-lag literature implies ~0.02-0.04) and found ~0.006. Industry/correlation
+lead-lag is **not present in liquid large-caps at weekly frequency over 2014-2024** — fully
+consistent with the literature, where the effect lives in **small, illiquid names** (which
+this universe excludes by construction) and has decayed post-2000. The rewire null and the
+planted-recovery bracket the claim: the harness would have seen it; it isn't there.
+
+## Headline (all five runs)
+
+The contemporaneous graph is a **red herring** (Runs 1-2: frozen ≈ dynamic ≈ none; GNN ≈ MLP).
+The lead-lag channel — the only one that *should* carry return signal — is a **powered null on
+liquid large-caps** (Run 5), validated by a planted-signal recovery proving the pipeline
+detects the effect when present. The vol "predictability" is ~90% persistence (Run 3), and
+inclusion-timing correction shrinks the already-null return IC (Run 4). Net: **on this
+universe, no graph configuration adds cross-sectional return signal that survives leak-free,
+powered, control-checked evaluation — and here is the harness that can tell that apart from the
+survivorship/overlap/over-smoothing artifacts that make graph "alpha" look real.**
