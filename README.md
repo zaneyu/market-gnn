@@ -52,14 +52,14 @@ A null is only worth reporting if the pipeline could have found signal. Two guar
   purity of graph/features/labels is asserted, not assumed.
 
 ```bash
-pytest -q     # 47 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
+pytest -q     # 52 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 47 tests (45 without torch), ~26s
+pytest -q                        # 52 tests (50 without torch), ~28s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -104,6 +104,15 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
 - **Signals** (`signals.py`) — real-data positive controls: textbook anomalies (short-term
   reversal, 12-1 momentum) run through the same harness, so a graph null is provably a real
   absence rather than a pipeline that finds nothing.
+- **Costs** (`costs.py`) — the decile long-short a signal implies, net of transaction costs:
+  breakeven bps and net Sharpe. Turns "cost-fragile" into a number (reversal breaks even at
+  ~0.9 bp → arbitraged net). A gross IC without this is how backtests lie.
+- **Economic-link edges** (`graph.edges_from_pairs`) — drop-in for a *real* linkage graph
+  (supplier–customer from 10-Ks, shared-analyst, 13F co-holding): provide a link CSV and the
+  lead-lag experiment runs on true economic links instead of the correlation/industry proxy.
+- **Reproducibility** (`data/snapshot.py` + `data_manifest.json`) — pinned universe/dates and a
+  content hash of the fetched prices, so a cloner verifies byte-identical data (Yahoo ToS
+  prevents shipping the data itself) before trusting the real-data numbers.
 
 ## Data & survivorship (read before trusting return claims)
 
@@ -116,10 +125,10 @@ return claims require the PIT path.**
 ## Layout
 
 ```
-src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · train
+src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[stub])
                 data/   (download · universe[PIT membership])
-tests/          47 tests — leak/PIT/purge/stat/power/lead-lag/positive-control harness
+tests/          52 tests — leak/PIT/stat/power/lead-lag/positive-control/cost harness
 configs/        default.yaml
 paper/note.md   writeup
 ```

@@ -33,32 +33,33 @@ def _signal(prices: pd.DataFrame, i: int, lookback: int, sign: int, skip: int) -
     return sign * (prices.iloc[i - skip] / prices.iloc[i - skip - lookback] - 1)
 
 
+def signal_panel(prices: pd.DataFrame, spec: dict, *, warmup: int = 260) -> pd.DataFrame:
+    """Long (date, asset, sig, fwd) panel for one anomaly spec, with non-overlapping
+    labels (step = horizon) so HAC inference and turnover are clean."""
+    idx = prices.index
+    lb, h, sign, skip = spec["lookback"], spec["horizon"], spec["sign"], spec.get("skip", 0)
+    recs = []
+    for i in range(max(warmup, lb + skip), len(idx) - h, h):
+        sig = _signal(prices, i, lb, sign, skip)
+        fwd = prices.iloc[i + h] / prices.iloc[i] - 1
+        recs.append(pd.DataFrame({"date": idx[i], "asset": prices.columns, "sig": sig.to_numpy(), "fwd": fwd.to_numpy()}))
+    return pd.concat(recs, ignore_index=True)
+
+
 def run_positive_controls(prices: pd.DataFrame, *, warmup: int = 260, controls=None) -> pd.DataFrame:
     """Per-date rank-IC of each known anomaly on real prices, with HAC t-stats,
     BH-FDR, and a crude turnover proxy (higher = more cost-fragile)."""
     controls = controls or DEFAULT_CONTROLS
-    idx = prices.index
-    rets = prices.pct_change()
     rows = []
     for c in controls:
-        lb, h, sign, skip = c["lookback"], c["horizon"], c["sign"], c.get("skip", 0)
-        # non-overlapping labels: step = horizon -> clean HAC inference
-        starts = range(max(warmup, lb + skip), len(idx) - h, h)
-        recs, prev_rank, turn = [], None, []
-        for i in starts:
-            sig = _signal(prices, i, lb, sign, skip)
-            fwd = prices.iloc[i + h] / prices.iloc[i] - 1
-            recs.append(pd.DataFrame({"date": idx[i], "sig": sig.to_numpy(), "fwd": fwd.to_numpy()}))
-            r = sig.rank()
-            if prev_rank is not None:
-                turn.append((r - prev_rank).abs().mean() / len(r))
-            prev_rank = r
-        df = pd.concat(recs, ignore_index=True)
+        df = signal_panel(prices, c, warmup=warmup)
+        piv = df.pivot(index="date", columns="asset", values="sig").rank(axis=1)
+        turnover = piv.diff().abs().mean(axis=1).div(piv.notna().sum(axis=1)).mean()
         ic = per_date_ic(df["sig"], df["fwd"], df["date"]).dropna()
         s = ic_summary(ic)
         rows.append({
             "signal": c["name"], "mean_ic": s["mean_ic"], "hac_t": s["hac_t"],
-            "naive_t": s["naive_t"], "p": two_sided_p(s["hac_t"]), "turnover": float(np.mean(turn)),
+            "naive_t": s["naive_t"], "p": two_sided_p(s["hac_t"]), "turnover": float(turnover),
             "n_dates": s["n"],
         })
     table = pd.DataFrame(rows)

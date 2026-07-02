@@ -166,10 +166,12 @@ daily cross-sections, clearing FDR. So the pipeline finds real return signal *wh
 the graph nulls are genuine absences, not a broken harness. Note it decays by the weekly horizon
 (reversal_1w null) — which is exactly why the weekly graph runs saw nulls.
 
-**Honest caveat (stated, not buried):** this is **gross** rank-IC. reversal_1d is ~daily-turnover
-(0.33) and the microstructure reversal effect is largely arbitraged after realistic transaction
-costs — it is a statistical *positive control*, not a tradable strategy. Reporting the effect
-*and* its cost fragility is the point.
+**Cost model makes the caveat a number (`python -m marketgnn.costs`).** The reversal_1d decile
+long-short is +0.38 Sharpe **gross** but its **breakeven cost is 0.9 bps** — below the ~2–5 bp
+large-cap round-trip — so net Sharpe is **−1.77 at 5 bps**, −3.9 at 10 bps. It is a genuine
+statistical effect (real return signal exists) that is **arbitraged net of costs**: a positive
+control, not a tradable strategy. Momentum_12-1 has lower turnover (breakeven ~12 bps) but isn't
+statistically significant here. Reporting the effect *and* exactly where costs kill it is the point.
 
 ## Headline (six runs)
 

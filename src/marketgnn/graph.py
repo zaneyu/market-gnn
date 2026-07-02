@@ -215,6 +215,30 @@ def add_self_loops(graph: Graph, *, weight: float = 1.0) -> Graph:
     return Graph(ei, w, np.asarray(graph.nodes))
 
 
+def edges_from_pairs(links: pd.DataFrame, nodes, *, symmetric: bool = False) -> Graph:
+    """Build a graph from an explicit link table -- the drop-in for a REAL
+    economic-link graph (supplier-customer from 10-K disclosures, shared-analyst
+    coverage, common 13F ownership). ``links`` has columns [src, dst, weight?];
+    tickers absent from ``nodes`` are dropped. This is the interface that lets the
+    lead-lag experiment run on true economic links instead of the correlation/sector
+    proxy -- provide the CSV, the harness does the rest.
+    """
+    pos = {t: i for i, t in enumerate(nodes)}
+    w_col = "weight" in links.columns
+    src, dst, w = [], [], []
+    for r in links.itertuples(index=False):
+        a, b = pos.get(r.src), pos.get(r.dst)
+        if a is None or b is None or a == b:
+            continue
+        wt = float(getattr(r, "weight")) if w_col else 1.0
+        src.append(a); dst.append(b); w.append(wt)
+        if symmetric:
+            src.append(b); dst.append(a); w.append(wt)
+    if not src:
+        return _empty(nodes)
+    return Graph(np.array([src, dst], np.int64), np.array(w, np.float32), np.asarray(nodes))
+
+
 def in_out_degrees(graph: Graph) -> tuple[np.ndarray, np.ndarray]:
     """(out_degree, in_degree) per node position -- used to verify the null matches."""
     n = len(graph.nodes)
