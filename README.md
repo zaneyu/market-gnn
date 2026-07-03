@@ -65,14 +65,14 @@ A null is only worth reporting if the pipeline could have found signal. Two guar
   purity of graph/features/labels is asserted, not assumed.
 
 ```bash
-pytest -q     # 58 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
+pytest -q     # 59 tests (3 GNN/temporal tests skip without torch); core needs no GNN stack
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 58 tests (56 without torch), ~30s
+pytest -q                        # 59 tests (56 without torch), ~30s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -112,6 +112,10 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
 - **Lead-lag** (`leadlag.py`) — the strictly-lagged neighbour-momentum signal (neighbours'
   past → own future), a **planted-signal recovery** proving the pipeline detects spillover,
   and the own-momentum control. This is the experiment that makes the null a *result*.
+- **Temporal GNN** (`models/temporal.py`) — a **GConvGRU** (graph-conv spatial layer → GRU
+  over dates): the *learned* counterpart to the zero-parameter lead-lag signal, with the same
+  `use_graph` blindfold A/B. It recovers a planted lead-lag (IC +0.067, t 3.9) then nulls on
+  real data (graph +0.013 vs no-graph +0.007, n.s.) — the null isn't a modelling limitation.
 - **Robustness** (`robustness.py`) — vol model vs the naive random-walk forecast (rank-IC and
   QLIKE), showing how much of the vol IC is mere persistence.
 - **Signals** (`signals.py`) — real-data positive controls: textbook anomalies (short-term
@@ -147,9 +151,9 @@ return claims require the PIT path.**
 
 ```
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · figures · train
-                models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[stub])
+                models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[GConvGRU])
                 data/   (download · universe[PIT membership] · cusip_map.csv)
-tests/          58 tests — leak/PIT/stat/power/lead-lag/coholding/control/cost/conditioning harness
+tests/          59 tests — leak/PIT/stat/power/lead-lag/coholding/temporal/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```
@@ -158,11 +162,10 @@ paper/note.md   writeup
 
 Both graph channels are tested — contemporaneous (Runs 1–2) and strictly-lagged spillover
 (Run 5) — over the correlation/industry proxy *and* over a **real 13F co-holding graph**
-(Run 8), all powered nulls. Remaining extensions: (1) a small/illiquid universe where the
-lead-lag effect is documented to survive; (2) delisted-price data (CRSP) for a fully
-survivorship-free PIT run; (3) supplier–customer links from 10-K segments as a second real
-economic graph; (4) a GConvGRU spatiotemporal model — though the zero-parameter lead-lag signal
-is the stronger test of *whether linkage carries information*.
+(Run 8), with both a zero-parameter read and a **learned GConvGRU** (Run 9), all powered
+nulls. Remaining extensions: (1) a small/illiquid universe where the lead-lag effect is
+documented to survive; (2) delisted-price data (CRSP) for a fully survivorship-free PIT run;
+(3) supplier–customer links from 10-K segments as a second real economic graph.
 
 ## License
 

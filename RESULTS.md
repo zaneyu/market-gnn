@@ -239,7 +239,43 @@ was hiding a real link" escape hatch: the real link is measured, powered, and st
 holds AAPL/MSFT, so the biggest names neighbour everything; the Anton–Polk effect is documented
 to be strongest in less-universally-held names, which this universe excludes by construction.)
 
-## Headline (eight runs)
+## Run 9 — a LEARNED temporal graph model (GConvGRU)
+
+The zero-parameter lead-lag signal (Runs 5, 8) is a *fixed* linear read of neighbours'
+past returns. A fair objection: maybe the linkage signal is there but non-linear or
+needs a longer memory, and only a *learned* temporal model would find it. So build one —
+a **graph-conv spatial layer per date feeding a GRU over the date sequence** (GConvGRU,
+Seo et al. 2018), the model whose absence the plan flagged. The A/B is the repo's usual
+blindfold: `use_graph=False` swaps the real edges for self-loops, so architecture,
+parameter count, GRU, head and loss are identical and only topology changes.
+(`python -m marketgnn.models.temporal`.)
+
+**First, power — recover the planted lead-lag (synthetic):**
+
+| graph            | mean IC (OOS) | HAC t | p      |
+|------------------|---------------|-------|--------|
+| yes              | +0.067        | 3.91  | <0.001 |
+| no (self-loops)  | −0.012        | −0.94 | 0.35   |
+
+The learned model **recovers** the planted spillover *only when it can see the graph*;
+blindfolded it finds nothing. So the model has the capacity and the graph is what
+carries the signal — the A/B is doing real work.
+
+**Then real data over the real 13F co-holding graph (90 large-caps, 2014–2024):**
+
+| graph            | mean IC (OOS) | HAC t | p    |
+|------------------|---------------|-------|------|
+| yes (co-holding) | +0.013        | 0.94  | 0.35 |
+| no (self-loops)  | +0.007        | 0.51  | 0.61 |
+
+**Read — the null survives a learned model that CAN see time.** Given the real economic
+link *and* the capacity to exploit temporal structure, the GConvGRU adds just +0.006 IC
+over the graph-blindfolded twin and neither clears significance (t < 1). So the earlier
+lead-lag nulls were **not a modelling limitation** — a linear zero-parameter read and a
+learned spatiotemporal network reach the same answer on these names. Same conclusion,
+one more escape hatch (\"you just needed a bigger model\") closed.
+
+## Headline (nine runs)
 
 The contemporaneous graph is a **red herring** (Runs 1-2: frozen ≈ dynamic ≈ none; GNN ≈ MLP).
 The lead-lag channel — the only one that *should* carry return signal — is a **powered null on
@@ -248,6 +284,10 @@ economic link (13F institutional co-holding, Run 8)** — both validated by a pl
 recovery over that exact graph, so the null is absence, not blindness. The vol "predictability"
 is ~90% persistence (Run 3), and inclusion-timing correction shrinks the already-null return IC
 (Run 4).
+
+A **learned spatiotemporal model** (GConvGRU, Run 9) — given the real link *and* the
+capacity to use time — reaches the same null (graph +0.013 vs no-graph +0.007, both n.s.),
+after recovering a planted effect (+0.067, t 3.9); so the null is not a modelling limitation.
 
 **What DOES carry return signal (Run 6):** the same harness finds **short-term (1-day) reversal
 strongly significant on real data** (IC +0.015, HAC t 3.4, p<0.001, FDR-sig) — a genuine
