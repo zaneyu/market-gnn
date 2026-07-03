@@ -19,12 +19,16 @@ signal, and decomposed where the apparent "graph alpha" actually comes from:
 1. **Contemporaneous graph is a red herring.** Frozen ≈ dynamic ≈ *no graph* for a linear
    model; the GNN ties the matched MLP (and is slightly worse — over-smoothing). Same-date
    message passing can't carry return signal, and doesn't.
-2. **Lead-lag / spillover is a *powered* null on large-caps.** Neighbours' past returns →
-   own future return (the channel Cohen–Frazzini / industry-momentum predicts). We first
-   **plant** the effect in a synthetic market and show the pipeline **recovers it** (IC 0.089,
-   HAC t 9.6, rewire-null clean) — proving power — then on real data find ~0.006 with **80%
-   power to detect 0.036**. Absent, not undetectable; consistent with the effect living in
-   small/illiquid names this universe excludes.
+2. **Lead-lag / spillover is a *powered* null on large-caps** — even over a *real* economic
+   link. Neighbours' past returns → own future return (the channel Cohen–Frazzini /
+   industry-momentum predicts). We first **plant** the effect and show the pipeline
+   **recovers it** (IC 0.089, HAC t 9.6, rewire-null clean) — proving power — then on real
+   data find ~0.006 with **80% power to detect 0.036**. And it is not a proxy artefact: a
+   graph of genuine **13F institutional co-holding** (Anton–Polk "Connected Stocks", built
+   from the actual SEC filings, PIT) is *also* a powered null (IC +0.010, 80% power to detect
+   0.023, rewire-clean) — the warmest linkage tested, still not significant. Absent, not
+   undetectable; consistent with the effect living in small/illiquid names this universe
+   excludes.
 3. **The vol "predictability" is ~90% persistence** — a naive trailing-vol forecast gets 0.435
    of the model's 0.479, and the model is *worse* on QLIKE (level calibration).
 4. **Survivorship inflates it:** point-in-time membership correction shrinks the already-null
@@ -61,14 +65,14 @@ A null is only worth reporting if the pipeline could have found signal. Two guar
   purity of graph/features/labels is asserted, not assumed.
 
 ```bash
-pytest -q     # 53 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
+pytest -q     # 58 tests (2 GNN A/B tests skip without torch); core needs no GNN stack
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 53 tests (51 without torch), ~30s
+pytest -q                        # 58 tests (56 without torch), ~30s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -121,9 +125,12 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   universe (`data/universe.extended_universe`) for real liquidity range and power.
 - **Figures** (`figures.py`) — the reversal-by-liquidity gradient and the cost-decay curve
   as PNGs (`figures/`), because visual evidence lands harder than tables.
-- **Economic-link edges** (`graph.edges_from_pairs`) — drop-in for a *real* linkage graph
-  (supplier–customer from 10-Ks, shared-analyst, 13F co-holding): provide a link CSV and the
-  lead-lag experiment runs on true economic links instead of the correlation/industry proxy.
+- **Real economic-link graph** (`coholding.py`) — not a proxy: an **institutional co-holding**
+  graph (Anton–Polk "Connected Stocks") built from the **SEC's structured 13F filings** — 11
+  year-end PIT snapshots, ~4,370 institutions, edges = cosine of shared-holder vectors. Runs
+  the identical lead-lag harness (with a planted-recovery power proof over the real graph) on a
+  genuine economic link. `graph.edges_from_pairs` is the generic hook; `data/cusip_map.csv` is
+  the committed, auditable ticker→CUSIP map.
 - **Reproducibility** (`data/snapshot.py` + `data_manifest.json`) — pinned universe/dates and a
   content hash of the fetched prices, so a cloner verifies byte-identical data (Yahoo ToS
   prevents shipping the data itself) before trusting the real-data numbers.
@@ -139,23 +146,23 @@ return claims require the PIT path.**
 ## Layout
 
 ```
-src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · figures · train
+src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[stub])
-                data/   (download · universe[PIT membership])
-tests/          53 tests — leak/PIT/stat/power/lead-lag/control/cost/conditioning harness
+                data/   (download · universe[PIT membership] · cusip_map.csv)
+tests/          58 tests — leak/PIT/stat/power/lead-lag/coholding/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```
 
 ## Roadmap
 
-Both graph channels are now tested: contemporaneous (Runs 1–2) and strictly-lagged spillover
-(Run 5, zero-parameter so nothing to overfit). Natural extensions: (1) a true economic-link
-graph (supplier/customer from 10-K segments, shared-analyst coverage) in place of the
-correlation/industry proxy — the lead-lag literature's effect is strongest there; (2) a
-small/illiquid universe where that effect is documented to survive; (3) delisted-price data
-(CRSP) for a fully survivorship-free PIT run; (4) a GConvGRU spatiotemporal model — though the
-zero-parameter lead-lag signal is the stronger test of *whether linkage carries information*.
+Both graph channels are tested — contemporaneous (Runs 1–2) and strictly-lagged spillover
+(Run 5) — over the correlation/industry proxy *and* over a **real 13F co-holding graph**
+(Run 8), all powered nulls. Remaining extensions: (1) a small/illiquid universe where the
+lead-lag effect is documented to survive; (2) delisted-price data (CRSP) for a fully
+survivorship-free PIT run; (3) supplier–customer links from 10-K segments as a second real
+economic graph; (4) a GConvGRU spatiotemporal model — though the zero-parameter lead-lag signal
+is the stronger test of *whether linkage carries information*.
 
 ## License
 

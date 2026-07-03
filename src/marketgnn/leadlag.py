@@ -77,17 +77,25 @@ def _residualize(y: np.ndarray, x: np.ndarray) -> np.ndarray:
 def run_leadlag(
     prices, sectors, market=None, *, edge_kinds=("sector", "correlation", "rewire"),
     label_horizon=5, lookback=5, corr_window=60, k=10, warmup=260, rebal_freq="W",
-    rewire_seeds=(0, 1, 2),
+    rewire_seeds=(0, 1, 2), graph_provider=None,
 ) -> pd.DataFrame:
     """Per-date rank-IC of the lead-lag signal (raw and own-momentum-residualized),
-    with a degree-preserving rewire null and each row's minimum detectable effect."""
+    with a degree-preserving rewire null and each row's minimum detectable effect.
+
+    ``graph_provider`` (optional) is a ``{kind: callable(asof, seed) -> Graph}`` map
+    used to supply externally-built PIT graphs (e.g. the real 13F co-holding graph,
+    see ``coholding.py``) for those kinds, in place of the built-in correlation/sector
+    construction -- so the identical harness runs on a true economic-link graph."""
     rets = prices.pct_change()
     rebal = [d for d in rebalance_dates(prices.index, rebal_freq)
              if prices.index.get_indexer([d])[0] >= warmup
              and prices.index.get_indexer([d])[0] + label_horizon < len(prices.index)]
     nodes = list(prices.columns)
+    graph_provider = graph_provider or {}
 
     def graph_for(kind, asof, seed=0):
+        if kind in graph_provider:
+            return graph_provider[kind](asof, seed)
         if kind == "rewire":
             real = make_graph("correlation", rets, sectors, asof, nodes, corr_window=corr_window, k=k)
             return G.degree_preserving_rewire(real, seed=seed)

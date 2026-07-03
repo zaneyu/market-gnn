@@ -195,13 +195,59 @@ So the illiquidity-concentration hypothesis is **not confirmed** here — expect
 lives in genuinely small/illiquid names this set still excludes. Refusing to claim the gradient it
 doesn't support is the point. Figures: `figures/reversal_by_liquidity.png`, `reversal_cost_decay.png`.
 
-## Headline (seven runs)
+## Run 8 — a REAL economic-link graph: 13F institutional co-holding
+
+Runs 1–5 tested the graph as a **correlation/industry proxy** for economic linkage. The
+lead-lag literature (Anton–Polk, "Connected Stocks", JF 2014) points at a *genuine* link:
+stocks held by the **same institutions** comove and lead-lag through correlated fund flows.
+So build that graph from the actual filings and run the identical harness on it. Source:
+the SEC's structured **13F** datasets — 11 year-end snapshots (Dec-2013 … Dec-2023), ~4,370
+institutions per snapshot, all 90 names. Two stocks are linked by the cosine of their binary
+institutional-holder vectors (kNN, k=10; avg degree ~18.6). **Point-in-time by construction:**
+the `{Y}q1` dataset holds Dec-(Y-1) positions filed within the 45-day deadline and public from
+~mid-Feb Y, and each snapshot graph is only applied to dates on/after its public date.
+(`python -m marketgnn.coholding`; ticker→CUSIP in the committed, auditable `data/cusip_map.csv`.)
+
+**First, power — plant a lead-lag ALONG the real co-holding graph and recover it:**
+
+| edges       | signal        | mean IC | HAC t | MDE₈₀ | FDR sig |
+|-------------|---------------|---------|-------|-------|---------|
+| coholding   | leadlag       | +0.025  | 3.65  | 0.019 | **yes** |
+| coholding   | leadlag_resid | +0.024  | 3.57  | 0.019 | **yes** |
+| rewire      | leadlag       | −0.001  | −0.41 | 0.019 | no      |
+
+The pipeline **recovers** a planted effect over *this* graph and the degree-preserving rewire
+finds nothing — so, as everywhere in this repo, a null on the real data is *absent*, not
+*undetectable*.
+
+**Then real data (90 large-caps, 2014–2024, weekly):**
+
+| edges       | signal        | mean IC | HAC t | p    | MDE₈₀ | FDR sig |
+|-------------|---------------|---------|-------|------|-------|---------|
+| coholding   | leadlag       | +0.010  | 1.18  | 0.24 | 0.023 | no      |
+| coholding   | leadlag_resid | +0.009  | 1.27  | 0.20 | 0.019 | no      |
+| rewire      | leadlag       | −0.002  | −0.31 | 0.76 | 0.013 | no      |
+
+**Read — a *powered* null on the real economic link, which is the stronger result.** Even the
+genuine co-holding graph the literature points to adds **no lead-lag return signal that
+survives** on liquid large-caps: IC +0.010 with 80% power to detect 0.023, not significant,
+rewire-null clean, above the own-momentum control. It is directionally the *warmest* linkage
+tested (+0.010 vs the sector/correlation proxies' +0.006 / −0.008 in Run 5) — consistent with a
+real-but-tiny effect — but it does not clear the bar. This closes the "maybe the proxy graph
+was hiding a real link" escape hatch: the real link is measured, powered, and still null here.
+(On these mega/large-caps the co-holding graph is also very *central* — nearly every institution
+holds AAPL/MSFT, so the biggest names neighbour everything; the Anton–Polk effect is documented
+to be strongest in less-universally-held names, which this universe excludes by construction.)
+
+## Headline (eight runs)
 
 The contemporaneous graph is a **red herring** (Runs 1-2: frozen ≈ dynamic ≈ none; GNN ≈ MLP).
 The lead-lag channel — the only one that *should* carry return signal — is a **powered null on
-liquid large-caps** (Run 5), validated by a planted-signal recovery proving the pipeline
-detects the effect when present. The vol "predictability" is ~90% persistence (Run 3), and
-inclusion-timing correction shrinks the already-null return IC (Run 4).
+liquid large-caps**, whether the edges are the correlation/industry proxy (Run 5) or a **real
+economic link (13F institutional co-holding, Run 8)** — both validated by a planted-signal
+recovery over that exact graph, so the null is absence, not blindness. The vol "predictability"
+is ~90% persistence (Run 3), and inclusion-timing correction shrinks the already-null return IC
+(Run 4).
 
 **What DOES carry return signal (Run 6):** the same harness finds **short-term (1-day) reversal
 strongly significant on real data** (IC +0.015, HAC t 3.4, p<0.001, FDR-sig) — a genuine

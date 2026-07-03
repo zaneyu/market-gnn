@@ -30,3 +30,6 @@ wandb/
 .DS_Store
 .idea/
 .vscode/
+
+# SEC 13F raw datasets (large; fetched on demand, not shipped)
+.cache/
