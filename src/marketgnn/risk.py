@@ -30,7 +30,22 @@ def _complete_case(returns: np.ndarray) -> np.ndarray:
 def sample_cov(returns: np.ndarray) -> np.ndarray:
     """Complete-case sample covariance (ddof=1)."""
     R = _complete_case(returns)
+    if R.shape[0] < 2:
+        raise ValueError(f"need >=2 complete-case rows for a covariance, got {R.shape[0]}")
     return np.cov(R, rowvar=False, ddof=1)
+
+
+def _psd_project(M: np.ndarray, *, floor: float = 1e-12) -> np.ndarray:
+    """Nearest PSD matrix by eigen-clipping negative eigenvalues to ``floor``. A convex
+    combination `δT + (1−δ)S` is only guaranteed PSD when BOTH operands are PSD; zeroing
+    arbitrary off-diagonals of the constant-correlation target destroys that invariant (at
+    realistic equity correlations the zeroed target is indefinite), so the graph target must
+    be projected back to PSD before it is combined with the sample covariance — otherwise the
+    GMVP optimizes over an indefinite non-covariance and returns leverage artifacts."""
+    M = (M + M.T) / 2.0
+    eig, Q = np.linalg.eigh(M)
+    eig = np.maximum(eig, floor)
+    return (Q * eig) @ Q.T
 
 
 def _constant_correlation_target(S: np.ndarray) -> np.ndarray:
@@ -86,15 +101,24 @@ def ledoit_wolf_cc(returns: np.ndarray) -> tuple[np.ndarray, float]:
 
 def gmvp_weights(cov: np.ndarray) -> np.ndarray:
     """Unconstrained global minimum-variance weights w ∝ Σ⁻¹1, normalized to 1ᵀw = 1.
-    Solves rather than inverts; ridges on a singular covariance so weights stay finite."""
+    Solves rather than inverts. Guards against a NON-PD covariance with a Cholesky check
+    (``solve`` raises only on exact singularity, not on an indefinite matrix — which would
+    silently produce garbage/sign-flipped weights), ridging by the magnitude of the most
+    negative eigenvalue so the fix is meaningful, not cosmetic."""
     n = cov.shape[0]
     ones = np.ones(n)
     try:
-        x = np.linalg.solve(cov, ones)
+        np.linalg.cholesky(cov)             # raises iff cov is not positive-definite
+        return _normalize(np.linalg.solve(cov, ones))
     except np.linalg.LinAlgError:
-        ridge = max(1e-12, 1e-8 * np.trace(cov) / n)
-        x = np.linalg.solve(cov + ridge * np.eye(n), ones)
-    return x / x.sum()
+        mineig = float(np.linalg.eigvalsh(cov).min())
+        ridge = max(1e-10, -mineig + 1e-10)  # lift the smallest eigenvalue positive
+        return _normalize(np.linalg.solve(cov + ridge * np.eye(n), ones))
+
+
+def _normalize(x: np.ndarray) -> np.ndarray:
+    s = x.sum()
+    return x / s if s != 0 else np.full_like(x, 1.0 / len(x))
 
 
 # --------------------------------------------------------------------------- graph → cov
@@ -124,6 +148,7 @@ def graph_masked_cov(returns: np.ndarray, adj: np.ndarray, *, shrink: float | No
     F = _constant_correlation_target(S)
     T = np.where(adj, F, 0.0)              # on-graph -> const-corr, off-graph -> 0
     np.fill_diagonal(T, np.diag(S))         # diagonal -> sample variance
+    T = _psd_project(T)                     # zeroing off-graph entries breaks PSD; restore it
     if shrink is None:
         _, shrink = ledoit_wolf_cc(returns)
     return shrink * T + (1.0 - shrink) * S

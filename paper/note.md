@@ -67,11 +67,12 @@ See RESULTS.md for full tables. Summary:
   bigger model" escape hatch.
 - **Run 10 — the null extends to RISK.** Covariance estimation is where structural priors are
   *known* to help (Ledoit–Wolf), so we ask whether a graph-structured covariance improves the
-  out-of-sample **minimum-variance portfolio**. Injection method is decisive: naive
-  covariance-space graph shrinkage is 8–12× *worse* than Ledoit–Wolf (a sparse graph can't
-  represent the dense market factor), while a precision-space **graphical lasso** ties it (realized
-  vol ratio 0.98, paired HAC t −1.55 n.s.). No significant risk improvement — bracketed by a
-  block-structure positive control and a catastrophic (112×) rewire null.
+  out-of-sample **minimum-variance portfolio**. Every graph estimator — a PSD-projected
+  conditional-independence shrinkage target (masked, ~1.02× LW's vol) and a precision-space
+  **graphical lasso** (0.98×) — is statistically indistinguishable from Ledoit–Wolf (all |t| < 1.96),
+  while plain sample/diagonal are significantly worse. The real graph edges its own degree-preserving
+  rewire but not significantly. No graph structure meaningfully improves covariance estimation on
+  large-caps — bracketed by a block-structure positive control that proves the harness has power.
 - **Primary endpoint (H1), tested directly.** The pre-registered GNN-vs-matched-MLP comparison is
   a *paired* per-date IC-difference test (HAC t + block-bootstrap CI + MDE), reported outside the
   FDR family — not two eyeballed IC-vs-zero rows. It isolates the incremental value of message-
@@ -100,7 +101,7 @@ pull (synthetic evidence is deterministic); transaction costs excluded (predicta
 weekly cadence power (mitigated by reporting MDE).
 
 ## 7. Reproducibility
-`pip install -e ".[dev,gnn]"`; `pytest -q` (62 tests; 3 GNN/temporal skip without torch, 1 skips
+`pip install -e ".[dev,gnn]"`; `pytest -q` (76 tests; 3 GNN/temporal skip without torch, 1 skips
 without the fetched 13F data); `python -m marketgnn.leadlag --synthetic-planted` (planted
 recovery); `python -m marketgnn.coholding` (real 13F graph); `python -m marketgnn.models.temporal
 --synthetic-planted` (GConvGRU power); `python -m marketgnn.train --synthetic --models

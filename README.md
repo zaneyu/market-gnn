@@ -161,12 +161,14 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   caught for BAC/SCHW/DIS/AMT/SPG).
 - **Risk, not alpha** (`risk.py`) — the honest reframe: graphs add no *return* signal, but does a
   graph-structured **covariance** beat standard shrinkage? Builds a graph-informed covariance (a
-  conditional-independence shrinkage target and a per-edge **graphical lasso** on the precision
-  matrix), forms the **global minimum-variance portfolio**, and scores out-of-sample realized vol
-  and QLIKE against Ledoit–Wolf, with a degree-preserving rewire null and a block-structure
-  positive control. Finding (Run 10): still a wash — precision-space graphical lasso *ties* LW
-  (vol ratio 0.98, t −1.55 n.s.), naive covariance-space shrinkage is 8× worse (a sparse graph
-  can't represent the dense market factor). The null extends from alpha to risk.
+  PSD-projected conditional-independence shrinkage target and a per-edge **graphical lasso** on the
+  precision matrix), forms the **global minimum-variance portfolio**, and scores out-of-sample
+  realized vol and QLIKE against Ledoit–Wolf, with a degree-preserving rewire null and a
+  block-structure positive control. Finding (Run 10): the null extends from alpha to risk — every
+  graph estimator (graphical lasso 0.98× LW's vol, masked ~1.02×) is *statistically indistinguishable*
+  from Ledoit–Wolf (all |t| < 1.96), while plain sample/diagonal are significantly worse; the real
+  graph edges its own rewire but not significantly. No graph structure meaningfully improves
+  covariance estimation here.
 - **Reproducibility** (`data/snapshot.py` + `data_manifest.json`) — pinned universe/dates and a
   content hash of the fetched prices (Yahoo ToS prevents shipping the data itself). Honest
   caveat: Yahoo **retroactively re-adjusts** historical closes for every later split/dividend,

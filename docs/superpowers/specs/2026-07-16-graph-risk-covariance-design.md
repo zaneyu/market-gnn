@@ -53,9 +53,14 @@ Graph estimators (headline graph = co-holding; reference = correlation-kNN):
   the Ledoit–Wolf-optimal intensity δ applied *everywhere*, where target `T` treats the graph as
   a conditional-independence prior: **on-graph** pairs shrink toward the constant-correlation
   target, **off-graph** pairs shrink toward **zero** (unlinked ⇒ low covariance), diagonal =
-  sample variances. (An earlier "keep raw S on edges" variant was rejected during implementation:
-  it under-shrinks exactly the noisiest entries. The conditional-independence version is the fair
-  test — it can beat plain LW iff the graph correctly flags weakly-related pairs.)
+  sample variances. **`T` is then PSD-projected** (eigen-clip negatives to a small floor) before
+  combining — zeroing arbitrary off-diagonals of the constant-correlation matrix makes it
+  *indefinite* at realistic equity correlations, and a convex combination `δT+(1−δ)S` is only
+  guaranteed PSD when both operands are; without the projection the GMVP optimizes over an
+  indefinite non-covariance and returns extreme leverage artifacts (the pre-merge review team
+  caught exactly this). (An earlier "keep raw S on edges" variant was also rejected during
+  implementation: it under-shrinks exactly the noisiest entries. The conditional-independence
+  version is the fair test — it can beat plain LW iff the graph correctly flags weakly-related pairs.)
 - **B — graph-penalized graphical lasso.** Sparse precision matrix Θ with a **per-edge** L1
   penalty matrix Λ (low `edge_penalty` on graph edges, high `offedge_penalty` off-graph; diagonal
   unpenalized). Solved by a **numpy-only ADMM** with a fully specified numerical contract:
@@ -135,10 +140,13 @@ own rewire, or the benefit is just sparsity/degree, not *topology*.
   missing return in the window, or use pairwise min-overlap), mirroring `graph._corr_matrix`'s
   complete-case guard — a single NaN column otherwise poisons `S` and `Σ⁻¹` fails. Report the
   count of assets/periods dropped.
-- **Inversion:** `gmvp_weights(cov)` computes `w = solve(cov, 1)` (not explicit `inv`); on
-  `LinAlgError` add a ridge `cov + ε·tr(cov)/n·I` and retry. Unconstrained GMVP on the sample
-  estimator is deliberately ill-conditioned (that is what the graph/shrinkage estimators improve
-  on), so the ridge is a numerical floor, not part of the compared estimator.
+- **Inversion:** `gmvp_weights(cov)` computes `w = solve(cov, 1)` (not explicit `inv`) after a
+  **`np.linalg.cholesky` positive-definiteness check** — `solve` raises only on exact singularity,
+  not on an *indefinite* matrix, which would silently return sign-flipped garbage weights. On a
+  non-PD covariance it ridges by the **magnitude of the most-negative eigenvalue**
+  (`cov + max(1e-10, −λ_min+1e-10)·I`) so the fix actually lifts the matrix to PD, not a cosmetic
+  `ε·tr` floor. With the PSD-projected target (Estimator A) the compared covariances are already PD,
+  so this is defense-in-depth, not part of the estimator.
 
 ## Regime conditioning (the paired second-tier add-on)
 
@@ -229,31 +237,34 @@ controls, mirroring the planted-recovery discipline used everywhere else in the 
 
 ## Outcome (realized — 90 large-caps, 101 monthly rebalances, 2016-07…2024-11, 252d window)
 
-The result is a nuanced wash, and the *injection method* is the finding:
+Every estimator clusters near Ledoit–Wolf, and no graph structure significantly beats it:
 
-- **Ledoit–Wolf is the benchmark** (annualized GMVP realized vol **14.9%**); plain sample (16.5%)
-  and diagonal (16.2%) are worse — shrinkage helps, as expected.
-- **Naive covariance-space graph shrinkage (estimator A) is catastrophic** — co-holding **8.4×**
-  LW's vol (124.6%), correlation graph 12.3× — because large-cap covariance is dominated by a
-  dense **market factor** that a sparse economic-link graph cannot represent; zeroing off-graph
-  *covariances* discards the dominant risk. The degree-preserving rewire is worse still (112×) —
-  topology matters, and random sparsity is nonsense.
-- **Precision-space graph sparsity (estimator B, graphical lasso) is statistically
-  indistinguishable from Ledoit–Wolf** — realized vol **14.6%** (ratio **0.98**, paired HAC
-  t **−1.55**, not significant), QLIKE marginally *worse* (1.82 vs 1.55). It preserves the market
-  factor (a dense covariance can have structured partial correlations) and adds the co-holding
-  conditional-independence structure, netting no significant change.
-- **Regime:** glasso's marginal edge over LW is ~uniform across correlation regimes (log-var ratio
+- **Ledoit–Wolf is the benchmark** (annualized GMVP realized vol **14.9%**, QLIKE 1.55). Plain
+  **sample** (16.5%, paired t **+6.06**) and **diagonal** (16.2%, t **+3.09**) are *significantly
+  worse* — shrinkage genuinely helps.
+- **Every graph estimator is statistically indistinguishable from LW** (all |t| < 1.96): the
+  precision-space **graphical lasso** (14.6%, ratio **0.98**, t **−1.55**) marginally under it, the
+  covariance-space **masked** estimators (co-holding 15.1%, t +1.03; correlation 15.1%, t +0.86)
+  marginally over it, and all marginally *worse* on QLIKE (glasso 1.82, masked 1.92/2.03 vs LW 1.55).
+- **The real graph edges its own rewire, but not significantly** — masked 15.1% / glasso 14.6% vs
+  the degree-preserving rewire null at 15.4%. So topology carries a *little* information; the margin
+  is inside noise.
+- **Regime:** glasso's tiny edge over LW is ~uniform across correlation regimes (log-var ratio
   −0.038 high-corr vs −0.034 low-corr, spread −0.005) — no meaningful crisis concentration.
 
-**Net:** the co-holding graph adds no *significant* covariance improvement over standard shrinkage
-on liquid large-caps — the null extends from alpha to risk — but, unlike the return channel, a
-correctly-specified graph estimator at least *matches* the benchmark rather than hurting. Bracketed
-by the block-structure **positive control** (the estimator DOES exploit a graph that genuinely is
-the covariance structure — proving power) and the **rewire null** (random topology is catastrophic),
-so the wash is a real absence, not a broken test. The headline lesson — precision-space vs
-covariance-space graph injection differ by 50×+ — is itself the useful result. Glasso penalties are
-fixed a-priori (not OOS-tuned), so the "indistinguishable" verdict does not lean on tuning.
+**Net:** on liquid large-caps a graph-structured covariance adds no *significant* out-of-sample
+improvement over standard constant-correlation shrinkage, whether the graph enters as a shrinkage
+target or as precision-matrix sparsity — the null extends from alpha to risk. Bracketed by the
+block-structure **positive control** (the masked estimator DOES beat sample and the mean rewire when
+the graph genuinely is the covariance structure — proving power) and the **rewire null** (the real
+graph edges random topology). Glasso penalties are fixed a-priori (not OOS-tuned).
+
+*Correction history: an earlier draft reported estimator A at 8–12× LW's vol (a "50×+ injection-
+method" headline). The pre-merge review team found the masked target was **indefinite** (zeroing
+off-graph entries breaks PSD), so the unconstrained GMVP was optimizing over a non-covariance and
+returning leverage artifacts. PSD-projecting the target (see Estimator A) corrected it to the clean
+~1.02× cluster above; the qualitative conclusion — no significant graph improvement — is unchanged
+and now rests on valid covariances.*
 
 ## Out of scope (YAGNI)
 

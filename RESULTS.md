@@ -300,30 +300,32 @@ rebalances 2016–2024, 252-day window.)
 | sample | 16.5% | 2.81 | 1.11 | +6.06 |
 | diagonal | 16.2% | 38.3 | 1.09 | +3.09 |
 | **ledoit_wolf** | **14.9%** | **1.55** | 1.00 | — |
-| masked (co-holding, cov-space) | 124.6% | 27.5 | 8.38 | +2.28 |
-| masked (correlation, cov-space) | 183.3% | 146.9 | 12.33 | +1.91 |
-| **glasso (co-holding, precision)** | **14.6%** | 1.82 | **0.98** | **−1.55** |
-| rewire null (co-holding) | 1659% | — | 111.6 | — |
+| masked (co-holding, cov-space) | 15.1% | 1.92 | 1.017 | +1.03 |
+| masked (correlation, cov-space) | 15.1% | 2.03 | 1.015 | +0.86 |
+| glasso (co-holding, precision) | **14.6%** | 1.82 | **0.98** | **−1.55** |
+| rewire null (co-holding) | 15.4% | — | 1.036 | — |
 
-**Read — the injection method is everything, and the net verdict is a wash.** Naive
-**covariance-space** graph shrinkage is *catastrophic* (8–12× LW's vol): large-cap covariance is
-dominated by a dense **market factor** that a sparse economic-link graph cannot represent, so
-zeroing off-graph *covariances* throws away the dominant risk (the rewire null, 112×, confirms
-random sparsity is nonsense). But **precision-space** graph sparsity — a graphical lasso penalizing
-off-graph *partial* correlations — preserves the market factor and lands **statistically
-indistinguishable from Ledoit–Wolf**: realized vol 14.6% vs 14.9% (ratio 0.98, paired HAC t −1.55,
-not significant), QLIKE marginally *worse*. Regime-conditioned, glasso's marginal edge is ~uniform
-across high- and low-correlation periods (log-var ratio −0.038 vs −0.034, spread −0.005) — no crisis
-concentration.
+**Read — every estimator clusters near Ledoit–Wolf, and no graph structure significantly beats it.**
+Shrinkage genuinely helps — plain **sample** (16.5%, t +6.06) and **diagonal** (16.2%, t +3.09) are
+significantly *worse* than LW. But every graph-structured estimator lands **statistically
+indistinguishable from Ledoit–Wolf** (all |t| < 1.96): the precision-space **graphical lasso**
+(14.6%, ratio 0.98, t −1.55) marginally under it, the covariance-space **masked** estimators (both
+15.1%, t +1.03 / +0.86) marginally over it, and all marginally *worse* on QLIKE (the variance-
+forecast loss). The real co-holding graph does edge its own degree-preserving **rewire** (masked
+15.1% / glasso 14.6% vs rewire 15.4%) — so topology carries a *little* information — but the margin
+is well inside noise. Regime-conditioned, glasso's tiny edge is ~uniform across high- and low-
+correlation periods (log-var ratio −0.038 vs −0.034, spread −0.005) — no crisis concentration.
 
-So the null extends from alpha to **risk**: the co-holding graph adds no *significant* covariance
-improvement over standard shrinkage on liquid large-caps. Unlike the return channel, a correctly
-specified graph estimator at least *matches* the benchmark rather than hurting — and the 50×+ gap
-between precision-space and covariance-space injection is itself the useful lesson. Bracketed as
-always by a **positive control** (on a synthetic block market where the graph genuinely *is* the
-covariance structure, the same estimator beats sample and rewire — the harness has power) and the
-**rewire null**, so the wash is a real absence, not a broken test. Glasso penalties are fixed
-a-priori, so "indistinguishable" doesn't lean on tuning.
+So the null extends from alpha to **risk**: on liquid large-caps a graph-structured covariance adds
+no *significant* out-of-sample improvement over standard constant-correlation shrinkage, whether the
+graph enters as a shrinkage target or as precision-matrix sparsity. Bracketed as always by a
+**positive control** (on a synthetic block market where the graph genuinely *is* the covariance
+structure, the same masked estimator beats sample and the mean rewire — the harness has power) and
+the **rewire null** (the real graph edges random topology), so the wash is a real absence, not a
+broken test. *(Methodological note: the masked estimator's graph target is PSD-projected before
+shrinking — a naive off-graph-zeroing target is indefinite at realistic correlations, which an
+earlier draft's unconstrained GMVP turned into 8–12× leverage artifacts; the pre-merge review team
+caught it. Glasso penalties are fixed a-priori, so "indistinguishable" doesn't lean on tuning.)*
 
 ## Headline (ten runs)
 
@@ -340,10 +342,11 @@ capacity to use time — reaches the same null (graph +0.006 vs no-graph +0.007,
 after recovering a planted effect (+0.067, t 3.9); so the null is not a modelling limitation.
 
 The null even extends to **risk** (Run 10): a graph-structured covariance feeding a minimum-variance
-portfolio adds no *significant* out-of-sample vol reduction over Ledoit–Wolf — precision-space
-graphical lasso ties it (ratio 0.98, t −1.55 n.s.), covariance-space shrinkage is 8× *worse* (the
-dense market factor a sparse graph can't represent) — bracketed by a block-structure positive
-control and a catastrophic rewire null.
+portfolio adds no *significant* out-of-sample vol reduction over Ledoit–Wolf — every graph estimator
+(precision-space graphical lasso 0.98× and covariance-space masked ~1.02×) is statistically
+indistinguishable from LW (all |t| < 1.96), while plain sample/diagonal are significantly worse.
+The real graph edges its own rewire but not significantly — bracketed by a block-structure positive
+control that proves the harness has power.
 
 The **pre-registered primary endpoint (H1)** is tested directly, not eyeballed: the *paired*
 per-date IC-difference series (GNN minus MLP on the same dates/universe) with a HAC t and
