@@ -41,7 +41,9 @@ signal, and decomposed where the apparent "graph alpha" actually comes from:
    indistinguishable from noise** (picking the in-sample-best config buys nothing OOS) and the
    gross portfolio Sharpe (+0.37 ann.) fails a **deflated-Sharpe** bar (DSR 0.74 at N=9, 0.62
    at N=100) — before costs (~0.9 bp breakeven) and before the survivorship exposure of a
-   positive claim on current membership. Reported at the same prominence as the original.
+   positive claim on current membership. Nuance kept honest in both directions: every grid
+   config has a *positive* gross Sharpe (+0.16 to +0.52), so the verdict is "no reliable
+   selection," not "no effect anywhere." Reported at the same prominence as the original.
 
 **Net:** the graph adds no return signal that survives leak-free, powered, control-checked
 evaluation; the one real-data return effect (short-horizon reversal) is a genuine
@@ -76,14 +78,14 @@ indefinite-covariance leverage artifact, caught pre-merge — plus the reviewer 
 rejected on verification.
 
 ```bash
-pytest -q     # 89 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
+pytest -q     # 91 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 89 tests (85 in torch-free CI), ~70s
+pytest -q                        # 91 tests (87 in torch-free CI), ~70s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -211,7 +213,7 @@ return claims require the PIT path.**
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · risk[covariance/GMVP] · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[GConvGRU])
                 data/   (download · universe[PIT membership] · cusip_map.csv)
-tests/          89 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/volspill/overfit[PBO·DSR]/control/cost/conditioning harness
+tests/          91 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/volspill/overfit[PBO·DSR]/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```

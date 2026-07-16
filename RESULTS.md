@@ -394,7 +394,7 @@ DSR at N ∈ {9, 25, 100} with iid-T and HAC-T_eff variants. (`python -m marketg
 | OOS-rank histogram | near-flat (0.07–0.20) |
 | **PSR(0), headline config** | 0.88 iid / 0.91 HAC-T_eff |
 | **DSR, N=9 (honest grid count)** | **0.74** iid / 0.77 T_eff |
-| DSR, N=25 / N=100 (search bound) | 0.69 / 0.62 |
+| DSR, N=25 / N=100 (search bound; iid variants) | 0.69 / 0.62 |
 
 **Read — the honest branch of the pre-registration fires: the reversal control does NOT
 survive strategy-level hardening.** PBO = 0.437 is the noise value — selecting the best
@@ -420,7 +420,7 @@ q=0.2 **quintiles** — label fixed at the source.)
 effective sample size; N=1 — the config was pre-registered, nothing was searched) on the
 co-holding spill_resid IC series = **0.9946** with T_eff = 85 of 125 (positive autocorrelation
 properly shrinks the effective sample). Above 0.95; conclusion and identification-limit framing
-unchanged.
+unchanged. Reproduce with `python -m marketgnn.overfit --run11-ic`.
 
 ## Headline (twelve runs)
 

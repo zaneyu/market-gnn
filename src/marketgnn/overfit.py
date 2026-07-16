@@ -211,12 +211,16 @@ def run_overfit(prices: pd.DataFrame, *, n_blocks: int = 16, warmup: int = 260
     head = series[(1, 1)]
     var_sr = float(np.var([r["sharpe"] for r in rows], ddof=1))
     teff = hac_t_eff(head)
+    hx = head.to_numpy()
+    hx = hx[np.isfinite(hx)] - np.nanmean(hx)
+    m2 = np.mean(hx**2)
     summary = {
         "pbo": pbo_out["pbo"], "oos_rank_freq": pbo_out["oos_rank_freq"],
         "n_splits": pbo_out["n_splits"], "n_days_used": pbo_out["n_days_used"],
         "headline": (1, 1), "sharpe": sharpe(head), "ann_sharpe": sharpe(head) * np.sqrt(252),
         "psr": psr(head), "psr_teff": psr(head, t_eff=teff), "t_eff": teff,
         "T": int(np.isfinite(head.to_numpy()).sum()), "var_sr": var_sr,
+        "skew": float(np.mean(hx**3) / m2**1.5), "kurtosis": float(np.mean(hx**4) / m2**2),
     }
     for n in (9, 25, 100):
         summary[f"dsr_n{n}"] = dsr(head, n_trials=n, var_sr=var_sr)
@@ -230,19 +234,28 @@ def main():
     ap = argparse.ArgumentParser(description="Run 12: PBO/CSCV + deflated Sharpe hardening")
     ap.add_argument("--synthetic-planted", action="store_true",
                     help="calibration demo on noise + one skilled config")
+    ap.add_argument("--run11-ic", action="store_true",
+                    help="reproduce Run 11's ic_psr on the co-holding spill_resid IC series")
     args = ap.parse_args()
 
     if args.synthetic_planted:
         rng = np.random.default_rng(0)
         M = pd.DataFrame(rng.normal(0, 0.01, size=(2000, 9)),
                          index=pd.bdate_range("2015-01-01", periods=2000))
-        print("=== CSCV calibration: pure noise (expect PBO ~ 4/9 in expectation) ===")
+        print("=== CSCV calibration: pure noise ===")
+        print("NOTE: this is ONE realization — single-draw PBO is hugely dispersed "
+              "(measured 0.26-0.94); the seed-AVERAGED expectation is 4/9 = 0.444, which is "
+              "what the calibration tests assert.")
         print({k: (round(v, 3) if isinstance(v, float) else v)
                for k, v in cscv_pbo(M).items() if k != "oos_rank_freq"})
         M[0] = M[0] + 0.004
         print("=== one genuinely skilled config (expect low PBO) ===")
         print({k: (round(v, 3) if isinstance(v, float) else v)
                for k, v in cscv_pbo(M).items() if k != "oos_rank_freq"})
+        return
+
+    if args.run11_ic:
+        _run11_ic()
         return
 
     from .data.download import load_market
@@ -263,6 +276,48 @@ def main():
     print(f"PSR(0):      iid {s['psr']:.4f}   HAC-T_eff {s['psr_teff']:.4f}")
     for n in (9, 25, 100):
         print(f"DSR (N={n:>3}): iid {s[f'dsr_n{n}']:.4f}   HAC-T_eff {s[f'dsr_n{n}_teff']:.4f}")
+
+
+def _run11_ic():
+    """Committed reproduction path for RESULTS' 'ic_psr 0.9946, T_eff 85 of 125': rebuilds
+    Run 11's co-holding spill_resid per-date IC series (mirrors run_volspill's coholding
+    path exactly) and applies ic_psr. ~2 min on the cached panel."""
+    from . import volspill
+    from .coholding import cusip_map, make_provider
+    from .data.download import load_market
+    from .evaluate import per_date_ic
+
+    nodes = list(cusip_map())
+    prices, _v, _s, _m = load_market(
+        synthetic=False, tickers=nodes, start="2014-01-01", end="2024-12-31")
+    prices = prices.reindex(columns=nodes).dropna(how="all")
+    provider, _ = make_provider(list(prices.columns), k=10)
+    rets = prices.pct_change()
+    vol_s = volspill.trailing_vol(rets, lookback=20)
+    vol_l = volspill.trailing_vol(rets, lookback=250)
+    innov = vol_s - vol_l
+    idx = prices.index
+    recs = []
+    for i in range(260, len(idx) - 20, 20):
+        t = idx[i]
+        g = provider["coholding"](t, 0)
+        sig = volspill.neighbour_innovation(innov.iloc[i], g)
+        fwd_win = rets.iloc[i + 1:i + 21]
+        fwd = fwd_win.std(ddof=1).where(fwd_win.notna().sum() >= 20).reindex(sig.index)
+        recs.append(pd.DataFrame({"date": t, "sig": sig.to_numpy(),
+                                  "own_s": vol_s.iloc[i].reindex(sig.index).to_numpy(),
+                                  "own_l": vol_l.iloc[i].reindex(sig.index).to_numpy(),
+                                  "fwd": fwd.to_numpy()}))
+    df = pd.concat(recs, ignore_index=True)
+    resid = df.groupby("date", sort=True, group_keys=False).apply(
+        lambda gdf: pd.Series(volspill._residualize_multi(
+            gdf["fwd"].to_numpy(), np.column_stack([gdf["own_s"], gdf["own_l"]])),
+            index=gdf.index),
+        include_groups=False)
+    ic = per_date_ic(df["sig"], resid.reindex(df.index), df["date"]).dropna()
+    print(f"Run 11 coholding spill_resid IC: mean {ic.mean():+.4f}, n={len(ic)}")
+    print(f"T_eff (HAC-aware): {hac_t_eff(ic):.0f} of {len(ic)}")
+    print(f"ic_psr: {ic_psr(ic):.4f}  (N=1 — pre-registered config, plain PSR, no deflation)")
 
 
 if __name__ == "__main__":

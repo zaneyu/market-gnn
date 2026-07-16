@@ -22,7 +22,7 @@ def _noise_matrix(rng, T=480, n_cfg=9):
 def test_cscv_pbo_detects_pure_noise():
     # negative control: no config has skill -> mean PBO over seeds ~ 4/9 (pinned convention)
     pbos = []
-    for s in range(24):
+    for s in range(40):
         rng = np.random.default_rng(s)
         out = overfit.cscv_pbo(_noise_matrix(rng), n_blocks=8, embargo=0)
         pbos.append(out["pbo"])
@@ -32,7 +32,7 @@ def test_cscv_pbo_detects_pure_noise():
 def test_cscv_pbo_low_for_true_skill():
     # positive control: one config with a genuine mean shift keeps winning OOS
     pbos = []
-    for s in range(24):
+    for s in range(40):
         rng = np.random.default_rng(100 + s)
         M = _noise_matrix(rng)
         M[0] = M[0] + 0.004  # strong true skill, well above the noise floor
@@ -114,3 +114,30 @@ def test_run_overfit_grid_shape():
                      index=pd.bdate_range("2019-01-01", periods=400))
     out = overfit.cscv_pbo(M, n_blocks=8, embargo=4)
     assert out["n_days_used"] == 400 - (8 - 1) * 4
+
+
+def test_hac_t_eff_direction():
+    """T_eff must shrink under POSITIVE autocorrelation and grow under NEGATIVE — a
+    mutation inverting the se ratio passed the whole suite before this test (it feeds
+    psr_teff, every dsr_*_teff, and the T_eff>T narrative in RESULTS)."""
+    rng = np.random.default_rng(11)
+    T = 3000
+    for phi, cmp in ((0.5, np.less), (-0.5, np.greater)):
+        e = rng.normal(0, 1, size=T)
+        x = np.empty(T)
+        x[0] = e[0]
+        for t in range(1, T):
+            x[t] = phi * x[t - 1] + e[t]
+        assert cmp(overfit.hac_t_eff(pd.Series(x)), T)
+
+
+def test_ic_psr_is_pinned_to_psr_with_teff():
+    """ic_psr must be exactly psr(x, sr_star=0, t_eff=hac_t_eff(x)) — plain PSR, never
+    routed through expected_max_sharpe (N=1 has no maximum to deflate against)."""
+    rng = np.random.default_rng(12)
+    x = pd.Series(rng.normal(0.02, 0.2, size=125))
+    assert overfit.ic_psr(x) == pytest.approx(
+        overfit.psr(x, sr_star=0.0, t_eff=overfit.hac_t_eff(x)), abs=1e-15)
+    # and it differs from the naive iid PSR whenever autocorrelation is present
+    y = x.rolling(3, min_periods=1).mean()  # induce positive autocorrelation
+    assert overfit.ic_psr(y) != pytest.approx(overfit.psr(y), abs=1e-6)

@@ -119,7 +119,7 @@ pull (synthetic evidence is deterministic); transaction costs excluded (predicta
 weekly cadence power (mitigated by reporting MDE).
 
 ## 7. Reproducibility
-`pip install -e ".[dev,gnn]"`; `pytest -q` (89 tests; 3 GNN/temporal skip without torch, 1 skips
+`pip install -e ".[dev,gnn]"`; `pytest -q` (91 tests; 3 GNN/temporal skip without torch, 1 skips
 without the fetched 13F data); `python -m marketgnn.leadlag --synthetic-planted` (planted
 recovery); `python -m marketgnn.coholding` (real 13F graph); `python -m marketgnn.models.temporal
 --synthetic-planted` (GConvGRU power); `python -m marketgnn.train --synthetic --models
