@@ -137,6 +137,8 @@ _MONTHS = {"JAN": "01", "FEB": "02", "MAR": "03", "APR": "04", "MAY": "05", "JUN
 def _parse_sec_date(s: pd.Series) -> pd.Series:
     """Locale-independent parse of SEC 'DD-MON-YYYY' dates -> Timestamps (NaT on junk)."""
     parts = s.str.upper().str.split("-", expand=True)
+    if parts.shape[1] < 3:  # wholesale-malformed / empty input: no valid dates
+        return pd.Series(pd.NaT, index=s.index)
     iso = parts[2] + "-" + parts[1].map(_MONTHS) + "-" + parts[0]
     return pd.to_datetime(iso, format="%Y-%m-%d", errors="coerce")
 
