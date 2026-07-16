@@ -43,9 +43,18 @@ noted as such.
   GNN-vs-matched-MLP comparison and `power.py` was powered for the *IC-difference* series, but the
   code only tested each cell's IC-vs-zero. Added `train.primary_endpoint`: the **paired per-date
   IC-difference** (GNN − MLP) with a HAC t, block-bootstrap CI, and MDE, reported outside the FDR
-  family. (Synthetic: ΔIC +0.005, t 0.33, p 0.75, MDE 0.047 — powered, no gap.)
-- **BH-FDR pooled heterogeneous endpoints and null controls**, biasing *toward* discovery. Now
-  applied **within each target family** and **excluding null-control rows** (rewire/none/own-mom).
+  family. (Synthetic: ΔIC +0.005, t 0.33, p 0.75.) Honest framing (tightened by a later pass): H1
+  isolates the incremental value of *message-passing* over an already-graph-informed MLP (both see
+  the neighbour feature), and its MDE (~0.047) sits above a plausible message-passing edge
+  (~0.005–0.02), so H1 is **underpowered for a small edge** — consistent with, but not ruling out,
+  one. The load-bearing power comes from the planted-recovery runs, not H1.
+- **BH-FDR pooled heterogeneous endpoints (ret + vol) and null controls into one family.** Now
+  applied **within each target family** and over the **discovery family only** (excluding the
+  rewire/none/own-mom controls, which are diagnostics). *Honest correction to the first draft of
+  this note:* excluding the controls is the discovery-family argument, **not** a way to remove a
+  "discovery bias" — pooling placebos would only enlarge `m` and make the real endpoints *harder*
+  to call significant (more conservative). It flips no conclusion here (every real endpoint has
+  p ≫ 0.05); a later adversarial pass caught the inverted reasoning and it is corrected here.
 - **MDE was mis-scaled.** `power.py` fed the *marginal* IC sd as the AR(1) *innovation* sd
   (over-dispersing the series by up to 2.3×) and used a larger HAC lag than the real test. Now
   scales the innovation to `sd·√(1−φ²)`, starts from the stationary distribution, and uses the

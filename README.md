@@ -23,7 +23,7 @@ signal, and decomposed where the apparent "graph alpha" actually comes from:
    link. Neighbours' past returns → own future return (the channel Cohen–Frazzini /
    industry-momentum predicts). We first **plant** the effect and show the pipeline
    **recovers it** (IC 0.089, HAC t 9.6, rewire-null clean) — proving power — then on real
-   data find ~0.006 with **80% power to detect ~0.032**. And it is not a proxy artefact: a
+   data find ~0.006 with **80% power to detect ~0.03**. And it is not a proxy artefact: a
    graph of genuine **13F institutional co-holding** (Anton–Polk "Connected Stocks", built
    from the actual SEC filings, PIT) is *also* a powered null (IC +0.012, HAC t 1.4, 80% power
    to detect ~0.025, rewire-clean) — the warmest linkage tested, still not significant. Absent,
@@ -114,8 +114,12 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
 - **Primary endpoint** (`train.primary_endpoint`) — the pre-registered H1 is tested as an
   actual **paired** comparison: the per-date IC-*difference* series (GNN minus MLP, same dates
   and universe) with a HAC t-stat, block-bootstrap CI, and an MDE — the exact estimand
-  `power.py` is powered for, reported *outside* the FDR family, not eyeballed from two separate
-  IC-vs-zero rows. (Synthetic: ΔIC +0.005, t 0.33, p 0.75, MDE 0.047 — powered, no gap.)
+  `power.py` is built for, reported *outside* the FDR family, not eyeballed from two separate
+  IC-vs-zero rows. H1 isolates the incremental value of **message-passing** over an already
+  graph-informed MLP (both see the neighbour-return feature). (Synthetic: ΔIC +0.005, t 0.33,
+  p 0.75; MDE ~0.047 — above a plausible message-passing edge of ~0.005–0.02, so this endpoint
+  is *underpowered for a small edge*: consistent with, not ruling out, one. The broader "graph
+  adds signal" claim rests on the zero-parameter lead-lag test and the planted-recovery power.)
 - **Evaluation** (`evaluate.py`) — per-date rank-IC aggregated with **Newey–West/HAC**
   t-stats and a **block bootstrap** (labels are autocorrelated; i.i.d. inference overstates
   significance). One pre-registered primary endpoint (H1); the grid is **BH-FDR** controlled.

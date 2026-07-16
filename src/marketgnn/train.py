@@ -204,6 +204,9 @@ def run(config: dict) -> pd.DataFrame:
         # different endpoints; vol's near-certain rejections must not shift the return
         # threshold) and EXCLUDING null-control graph kinds (rewire/random/none), which
         # are not discovery candidates. Controls get fdr_sig=False, q=NaN.
+        #   Direction note: pooling controls would only make the family LARGER and thus
+        # MORE conservative for the real endpoints -- excluding them is the discovery-
+        # family argument, not a way to remove a discovery bias (there isn't one).
         controls = {"rewire", "random", "none"}
         table["fdr_sig"] = False
         table["q"] = np.nan
@@ -255,11 +258,17 @@ def main():
     else:
         print("\n=== PRIMARY ENDPOINT (H1): GNN - MLP paired IC difference, target=ret ===")
         print(f"  graph={pe['graph']}  IC(gnn)={pe['ic_gnn']:+.4f}  IC(mlp)={pe['ic_mlp']:+.4f}")
+        print(f"  (both models see the neighbour-return feature; H1 isolates the incremental "
+              f"value of MESSAGE-PASSING over that graph-informed MLP)")
         print(f"  ΔIC = {pe['delta_ic']:+.4f}   HAC t = {pe['hac_t']:+.2f}   p = {pe['p']:.3f}"
               f"   95% CI [{pe['ci_lo']:+.4f}, {pe['ci_hi']:+.4f}]")
-        print(f"  n_dates = {pe['n_dates']}   MDE(80% power) = {pe['mde_80']:.4f}   "
-              f"-> {'DETECTABLE gap present' if pe['p'] < 0.05 else 'no significant gap'} "
-              f"({'powered' if pe['mde_80'] < 0.05 else 'underpowered'} at this cadence)")
+        # No binary powered/underpowered verdict at an arbitrary 0.05 line: report the MDE
+        # against the effect that would actually be interesting and let the reader judge.
+        verdict = "no significant gap" if pe["p"] >= 0.05 else "significant gap"
+        print(f"  n_dates = {pe['n_dates']}   MDE(80% power) = {pe['mde_80']:.4f}   -> {verdict}.")
+        print(f"  Caveat: a plausible message-passing edge is ~0.005-0.02 IC, well below this MDE, "
+              f"so this endpoint is UNDERPOWERED for a small edge — it is consistent with, but "
+              f"does not rule out, one. The load-bearing power is the planted-recovery runs.")
 
 
 if __name__ == "__main__":

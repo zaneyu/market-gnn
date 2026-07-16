@@ -91,8 +91,11 @@ def load_holders(snap: dict, cmap: dict[str, str]) -> pd.DataFrame:
     restated amendments (13F-HR/A) that were not public at the original deadline never
     enter the graph; (2) ``FILING_DATE <= public`` drops late/tardy filers that a
     reader on the public date could not yet have seen. Both bound the look-ahead the
-    naive "everything in the quarterly file" approach would admit."""
-    cache = _cache_dir() / f"holders_{snap['period']}.csv"
+    naive "everything in the quarterly file" approach would admit.
+
+    The cache key carries a schema version (``_v2``) so changing the filter logic
+    invalidates stale caches automatically rather than silently returning pre-guard data."""
+    cache = _cache_dir() / f"holders_v2_{snap['period']}.csv"
     if cache.exists():
         return pd.read_csv(cache, dtype={"cik": str, "ticker": str})
 
@@ -107,15 +110,35 @@ def load_holders(snap: dict, cmap: dict[str, str]) -> pd.DataFrame:
                         ["ACCESSION_NUMBER", "FILING_DATE", "SUBMISSIONTYPE", "CIK", "PERIODOFREPORT"])
     info = info[(info["SSHPRNAMTTYPE"] == "SH") & (info["PUTCALL"] == "")]
     info = info[info["CUSIP"].isin(universe_cusips)]
-    filing_date = pd.to_datetime(sub["FILING_DATE"], format="%d-%b-%Y", errors="coerce")
+    filing_date = _parse_sec_date(sub["FILING_DATE"])
+    if filing_date.isna().all():
+        raise ValueError(f"all FILING_DATE values failed to parse for {snap['period']}; "
+                         f"refusing to build an empty (all-isolated) co-holding graph")
     sub = sub[(sub["SUBMISSIONTYPE"] == "13F-HR")
               & (sub["PERIODOFREPORT"] == snap["period"])
               & (filing_date <= snap["public"])]
     merged = info.merge(sub[["ACCESSION_NUMBER", "CIK"]], on="ACCESSION_NUMBER", how="inner")
     merged["ticker"] = merged["CUSIP"].map(cusip_to_ticker)
     out = merged[["CIK", "ticker"]].drop_duplicates().rename(columns={"CIK": "cik"})
+    if out.empty:
+        raise ValueError(f"no 13F-HR holders parsed for {snap['period']} — likely a filter "
+                         f"or identifier bug; refusing to cache an empty result")
     out.to_csv(cache, index=False)
     return out
+
+
+# SEC FILING_DATE is always "DD-MON-YYYY" with an ENGLISH uppercase month abbreviation,
+# regardless of machine locale. Parse it with an explicit month map so a non-English
+# LC_TIME can't coerce every date to NaT (which would silently empty the graph).
+_MONTHS = {"JAN": "01", "FEB": "02", "MAR": "03", "APR": "04", "MAY": "05", "JUN": "06",
+           "JUL": "07", "AUG": "08", "SEP": "09", "OCT": "10", "NOV": "11", "DEC": "12"}
+
+
+def _parse_sec_date(s: pd.Series) -> pd.Series:
+    """Locale-independent parse of SEC 'DD-MON-YYYY' dates -> Timestamps (NaT on junk)."""
+    parts = s.str.upper().str.split("-", expand=True)
+    iso = parts[2] + "-" + parts[1].map(_MONTHS) + "-" + parts[0]
+    return pd.to_datetime(iso, format="%Y-%m-%d", errors="coerce")
 
 
 def holders_covered(snap: dict, cmap: dict[str, str]) -> int:

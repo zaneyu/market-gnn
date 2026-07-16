@@ -124,9 +124,9 @@ market with a *planted* block-lead-lag effect: `python -m marketgnn.leadlag --sy
 
 | edges  | signal        | mean IC | HAC t | MDE₈₀ | FDR sig |
 |--------|---------------|---------|-------|-------|---------|
-| sector | leadlag       | +0.089  | 9.59  | 0.033 | **yes** |
-| sector | leadlag_resid | +0.085  | 9.47  | 0.033 | **yes** |
-| rewire | leadlag       | −0.001  | −0.49 | 0.029 | no      |
+| sector | leadlag       | +0.089  | 9.59  | 0.028 | **yes** |
+| sector | leadlag_resid | +0.085  | 9.47  | 0.027 | **yes** |
+| rewire | leadlag       | −0.001  | −0.49 | 0.021 | no      |
 
 The pipeline **recovers** the planted effect over the true graph (well above MDE), it
 **survives** the own-momentum control (`_resid`), and the degree-preserving **rewire null
@@ -296,8 +296,13 @@ after recovering a planted effect (+0.067, t 3.9); so the null is not a modellin
 
 The **pre-registered primary endpoint (H1)** is tested directly, not eyeballed: the *paired*
 per-date IC-difference series (GNN minus MLP on the same dates/universe) with a HAC t and
-block-bootstrap CI (`train.primary_endpoint`) — the exact estimand `power.py` powers for.
-Synthetic: ΔIC +0.005, t 0.33, p 0.75, MDE 0.047 (powered) — no GNN-over-MLP gap.
+block-bootstrap CI (`train.primary_endpoint`). It isolates the incremental value of *message-
+passing* over an already-graph-informed MLP (both consume the neighbour-return feature).
+Synthetic: ΔIC +0.005, t 0.33, p 0.75 — no GNN-over-MLP gap. Honest power note: the MDE (~0.047)
+sits *above* a plausible message-passing edge (~0.005–0.02), so H1 is **underpowered for a small
+edge** — it is consistent with, but does not rule out, one. The broader "graph adds return
+signal" question is carried by the zero-parameter lead-lag test (Runs 5/8) and its planted-signal
+power, not by H1.
 
 **What DOES carry return signal (Run 6):** the same harness finds **short-term (1-day) reversal
 strongly significant on real data** (IC +0.015, HAC t 3.4, p<0.001, FDR-sig) — a genuine

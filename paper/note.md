@@ -67,8 +67,10 @@ See RESULTS.md for full tables. Summary:
   bigger model" escape hatch.
 - **Primary endpoint (H1), tested directly.** The pre-registered GNN-vs-matched-MLP comparison is
   a *paired* per-date IC-difference test (HAC t + block-bootstrap CI + MDE), reported outside the
-  FDR family — not two eyeballed IC-vs-zero rows. Synthetic: ΔIC +0.005, t 0.33, p 0.75, MDE
-  0.047 (powered) — no gap.
+  FDR family — not two eyeballed IC-vs-zero rows. It isolates the incremental value of message-
+  passing over an already-graph-informed MLP. Synthetic: ΔIC +0.005, t 0.33, p 0.75 — no gap; but
+  the MDE (~0.047) exceeds a plausible message-passing edge (~0.005–0.02), so H1 is underpowered
+  for a small edge (consistent with, not ruling out, one). Power rests on the planted recoveries.
 
 ## 4. Interpretation
 On liquid large-caps, no graph configuration adds cross-sectional return signal — not the

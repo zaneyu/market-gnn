@@ -151,10 +151,16 @@ def run_leadlag(
     })
     table = pd.DataFrame(rows)
     # BH-FDR only over the genuine ALTERNATIVE hypotheses -- the real-linkage lead-lag
-    # signals. The rewire graph and own-momentum rows are NULL CONTROLS, not discovery
-    # candidates; folding their (near-1) p-values into the family would inflate the
-    # denominator and make the real endpoints easier to "discover." Controls are shown
+    # signals -- because FDR should control discoveries among the family you actually
+    # claim discoveries on. The rewire graph and own-momentum rows are NULL CONTROLS
+    # (diagnostics), not discovery candidates, so they are reported outside the family
     # with fdr_sig = False and q = NaN.
+    #   Honest note on direction: pooling the placebo controls into BH would *raise* m
+    # and make the real endpoints HARDER to call significant (more conservative), not
+    # easier -- so excluding them is the slightly less conservative choice. For a study
+    # whose result is a set of NULLS that is the right call (a null should clear the
+    # easier bar to be convincing), and it flips no conclusion here (every real endpoint
+    # has p >> 0.05); but it is the discovery-family argument, NOT a discovery-bias one.
     is_control = table["edges"].eq("rewire") | table["signal"].eq("own_mom")
     table["fdr_sig"] = False
     table["q"] = np.nan
