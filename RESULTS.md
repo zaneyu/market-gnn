@@ -166,7 +166,7 @@ daily cross-sections, clearing FDR. So the pipeline finds real return signal *wh
 the graph nulls are genuine absences, not a broken harness. Note it decays by the weekly horizon
 (reversal_1w null) — which is exactly why the weekly graph runs saw nulls.
 
-**Cost model makes the caveat a number (`python -m marketgnn.costs`).** The reversal_1d decile
+**Cost model makes the caveat a number (`python -m marketgnn.costs`).** The reversal_1d quintile (q=0.2)
 long-short is +0.38 Sharpe **gross** but its **breakeven cost is 0.9 bps** — below the ~2–5 bp
 large-cap round-trip — so net Sharpe is **−1.77 at 5 bps**, −3.9 at 10 bps. It is a genuine
 statistical effect (real return signal exists) that is **arbitraged net of costs**: a positive
@@ -376,7 +376,53 @@ in standard Diebold–Yilmaz connectedness without identification assumptions). 
 remains overwhelmingly dominant (+0.510 vs +0.038) — the graph adds a sliver, not a regime
 change. Return channels: still all null.
 
-## Headline (eleven runs)
+## Run 12 — backtest-overfitting hardening: PBO (CSCV) + deflated Sharpe
+
+The repo's surviving positives had faced HAC t-stats and FDR but not the standard López-de-Prado
+battery: does the reversal control survive **CSCV/PBO** over its natural configuration grid, and
+a **deflated Sharpe** that accounts for search? Pre-registered: grid `lookback ∈ {1,3,5} ×
+horizon ∈ {1,3,5}` (9 configs), each converted to a DAILY series via Jegadeesh–Titman
+overlapping tranches (mixed-horizon step-sampling would put configs on incompatible axes);
+quintile (q=0.2) long-short, gross; S=16 contiguous blocks with a 4-day boundary embargo, all
+12,870 splits enumerated; PBO convention = strictly-below-median (noise ⇒ 4/9 ≈ 0.444);
+DSR at N ∈ {9, 25, 100} with iid-T and HAC-T_eff variants. (`python -m marketgnn.overfit`.)
+
+| item | value |
+|------|-------|
+| grid gross ann. Sharpe range | +0.16 … +0.52 (headline (1,1): +0.37) |
+| **PBO** | **0.437** — indistinguishable from the noise value 0.444 |
+| OOS-rank histogram | near-flat (0.07–0.20) |
+| **PSR(0), headline config** | 0.88 iid / 0.91 HAC-T_eff |
+| **DSR, N=9 (honest grid count)** | **0.74** iid / 0.77 T_eff |
+| DSR, N=25 / N=100 (search bound) | 0.69 / 0.62 |
+
+**Read — the honest branch of the pre-registration fires: the reversal control does NOT
+survive strategy-level hardening.** PBO = 0.437 is the noise value — selecting the best
+in-sample configuration buys **nothing** out-of-sample. The headline config's gross annualized
+Sharpe (+0.37) has PSR(0) = 0.88–0.91, short of 0.95 even before deflation, and DSR = 0.74 at
+the honest N=9 (0.62 at N=100, bounding the repo's realized wider search). Two nuances reported
+rather than hidden: (a) every config has a *positive* gross Sharpe — the PBO verdict is "no
+config is reliably better than another," not "no effect anywhere"; (b) T_eff (3130) exceeds
+T (2506) because daily reversal-book returns are *negatively* autocorrelated, so here the iid
+variant is the conservative one — stated, since the spec assumed the opposite direction.
+
+**Consequence for Run 6's framing (applied throughout):** the reversal result stands as a
+**cross-sectional association** (per-date rank-IC +0.015, HAC t 3.4 — a valid harness positive
+control) but is **demoted as a strategy**: even gross, its portfolio-level Sharpe does not
+clear a deflated bar, and its configuration grid shows no selection robustness. "The one real
+return signal" language is retired; the honest statement is "the one real cross-sectional
+association — which does not validate as a tradable strategy even before costs." Run 6's
+cost-fragility caveat (~0.9 bp breakeven) pointed this way; Run 12 makes it quantitative at
+the strategy level. (Also corrected here: `costs.py` and Run 6 said "decile" while computing
+q=0.2 **quintiles** — label fixed at the source.)
+
+**Run 11's IC gets the same treatment and survives it:** `ic_psr` (PSR with the HAC-aware
+effective sample size; N=1 — the config was pre-registered, nothing was searched) on the
+co-holding spill_resid IC series = **0.9946** with T_eff = 85 of 125 (positive autocorrelation
+properly shrinks the effective sample). Above 0.95; conclusion and identification-limit framing
+unchanged.
+
+## Headline (twelve runs)
 
 The contemporaneous graph is a **red herring** (Runs 1-2: frozen ≈ dynamic ≈ none; GNN ≈ MLP).
 The lead-lag channel — the only one that *should* carry return signal — is a **powered null on
@@ -414,13 +460,15 @@ edge** — it is consistent with, but does not rule out, one. The broader "graph
 signal" question is carried by the zero-parameter lead-lag test (Runs 5/8) and its planted-signal
 power, not by H1.
 
-**What DOES carry return signal (Run 6):** the same harness finds **short-term (1-day) reversal
-strongly significant on real data** (IC +0.015, HAC t 3.4, p<0.001, FDR-sig) — a genuine
-non-null (though a *survivorship-exposed* positive claim: unlike the graph nulls, bias here runs
-toward finding signal, so treat it as a harness-can-find-things control, not a clean tradable
-result — a fully PIT reversal run needs delisted-name prices). So the nulls above are **real
-absences bracketed by positive controls on both real data (reversal) and synthetic data
-(planted lead-lag)**, not a pipeline that can't find anything.
+**The real-data positive control (Run 6), post-hardening (Run 12):** the same harness finds
+**short-term (1-day) reversal significant as a cross-sectional association** (IC +0.015, HAC
+t 3.4, p<0.001, FDR-sig) — a genuine non-null and a valid harness-can-find-things control. But
+Run 12's López-de-Prado battery **demotes it as a strategy**: its config grid's PBO (0.437) is
+indistinguishable from noise, and the gross portfolio Sharpe fails a deflated bar (DSR 0.74 at
+N=9). It is also *survivorship-exposed* (a positive claim on current membership). So the nulls
+above are **real absences bracketed by positive controls** on real data (an IC-level
+association) and synthetic data (planted recoveries) — not a pipeline that can't find anything —
+while the repo claims **no validated tradable return strategy anywhere, even gross**.
 
 Net: **the graph adds no cross-sectional return signal that survives leak-free, powered,
 control-checked evaluation; the return signal that IS present (short-horizon reversal) is

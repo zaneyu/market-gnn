@@ -1,5 +1,5 @@
 """Transaction-cost model: turn a gross rank-IC into the number a trader cares
-about — the **breakeven cost** and the net-of-cost Sharpe of the decile long-short
+about — the **breakeven cost** and the net-of-cost Sharpe of the quintile (q=0.2) long-short
 portfolio a signal implies.
 
 A gross positive with no cost accounting is how backtests lie. Short-horizon
@@ -17,7 +17,7 @@ import pandas as pd
 
 
 def longshort_portfolio(panel: pd.DataFrame, *, q: float = 0.2):
-    """Decile long-short weights and per-rebalance gross return + turnover.
+    """Quintile (q=0.2 default) long-short weights and per-rebalance gross return + turnover.
 
     `panel` has columns (date, asset, sig, fwd). Long the top q by signal, short
     the bottom q, equal-weight within each leg (weights sum to +1 long / −1 short).
@@ -68,7 +68,7 @@ def main():
 
     prices, *_ = load_market(synthetic=False, tickers=default_universe(),
                              start="2014-01-01", end="2024-12-31")
-    print("=== net-of-cost decile long-short (gross rank-IC is not enough) ===")
+    print("=== net-of-cost quintile long-short (gross rank-IC is not enough) ===")
     for spec in DEFAULT_CONTROLS:
         panel = signal_panel(prices, spec)
         s = cost_summary(panel)

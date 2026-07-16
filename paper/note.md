@@ -82,6 +82,15 @@ See RESULTS.md for full tables. Summary:
   observationally equivalent to transmission in this design (simulated exposure alone produces
   +0.10–0.22), so the claim is "volatility-relevant information travels with the topology,"
   not causal spillover. Own persistence dominates (+0.510, t 28).
+- **Run 12 — the positives get the López-de-Prado battery.** CSCV/PBO over the reversal
+  signal's pre-registered 3×3 grid (daily Jegadeesh–Titman tranche series; 12,870 splits;
+  strictly-below-median convention, noise ⇒ 4/9) and deflated Sharpe at N ∈ {9,25,100}:
+  **PBO 0.437 ≈ noise, DSR 0.74 (N=9) → 0.62 (N=100)** — the reversal control is demoted from
+  "the one real return signal" to a genuine cross-sectional **association that does not
+  validate as a strategy even gross**. Every grid config has positive gross Sharpe (+0.16 to
+  +0.52), so the verdict is "no reliable selection," not "no effect." Run 11's IC gets the
+  same PSR treatment (HAC T_eff = 85 of 125; N=1, pre-registration is its protection) and
+  survives at **0.9946** — conclusion unchanged.
 - **Primary endpoint (H1), tested directly.** The pre-registered GNN-vs-matched-MLP comparison is
   a *paired* per-date IC-difference test (HAC t + block-bootstrap CI + MDE), reported outside the
   FDR family — not two eyeballed IC-vs-zero rows. It isolates the incremental value of message-
@@ -110,7 +119,7 @@ pull (synthetic evidence is deterministic); transaction costs excluded (predicta
 weekly cadence power (mitigated by reporting MDE).
 
 ## 7. Reproducibility
-`pip install -e ".[dev,gnn]"`; `pytest -q` (84 tests; 3 GNN/temporal skip without torch, 1 skips
+`pip install -e ".[dev,gnn]"`; `pytest -q` (89 tests; 3 GNN/temporal skip without torch, 1 skips
 without the fetched 13F data); `python -m marketgnn.leadlag --synthetic-planted` (planted
 recovery); `python -m marketgnn.coholding` (real 13F graph); `python -m marketgnn.models.temporal
 --synthetic-planted` (GConvGRU power); `python -m marketgnn.train --synthetic --models

@@ -33,21 +33,21 @@ signal, and decomposed where the apparent "graph alpha" actually comes from:
    of the model's 0.479, and the model is *worse* on QLIKE (level calibration).
 4. **Survivorship inflates it:** point-in-time membership correction shrinks the already-null
    return IC.
-5. **What DOES carry signal (positive control):** the same harness finds **short-term (1-day)
-   reversal strongly significant on real data** — IC +0.015, HAC t 3.4, p<0.001, FDR-sig. So
-   the graph nulls are *real absences*, bracketed by positive controls on both real data
-   (reversal) and synthetic data (planted lead-lag) — not a pipeline that can't find anything.
-   (Gross rank-IC; reversal is high-turnover and cost-fragile — reported as a statistical
-   control, not a tradable strategy.) **Survivorship caveat:** unlike the graph *nulls* (where
-   survivorship bias runs *toward* finding signal, so a null is conservative), this reversal
-   result is a *positive* return claim run on a current-membership universe — survivorship-exposed.
-   Treat it as a suggestive control that the harness can find a real effect, not a clean tradable
-   finding; a fully PIT reversal run is future work (needs delisted-name prices).
+5. **The positive control survives as an association, not a strategy.** The same harness finds
+   **short-term (1-day) reversal significant as a cross-sectional association** — IC +0.015,
+   HAC t 3.4, p<0.001, FDR-sig — so the graph nulls are *real absences*, bracketed by positive
+   controls on real data (this) and synthetic data (planted recoveries). But the Run 12
+   López-de-Prado battery **demotes it as a strategy**: its 3×3 config grid's **PBO (0.437) is
+   indistinguishable from noise** (picking the in-sample-best config buys nothing OOS) and the
+   gross portfolio Sharpe (+0.37 ann.) fails a **deflated-Sharpe** bar (DSR 0.74 at N=9, 0.62
+   at N=100) — before costs (~0.9 bp breakeven) and before the survivorship exposure of a
+   positive claim on current membership. Reported at the same prominence as the original.
 
 **Net:** the graph adds no return signal that survives leak-free, powered, control-checked
-evaluation; the return signal that *is* present (short-horizon reversal) is non-graph and
-cost-fragile — and this repo is the harness that separates a real effect from the survivorship /
-overlap / over-smoothing artifacts that make graph "alpha" look real.
+evaluation; the one real-data return effect (short-horizon reversal) is a genuine
+cross-sectional *association* that does **not** validate as a tradable strategy even gross —
+and this repo is the harness that separates real effects from the survivorship / overlap /
+over-smoothing / selection artifacts that make "alpha" look real.
 Full decomposition and numbers in [RESULTS.md](RESULTS.md).
 
 The reversal effect is real gross but dies at ~0.9 bp of cost, and (on a 194-name universe) is
@@ -76,14 +76,14 @@ indefinite-covariance leverage artifact, caught pre-merge — plus the reviewer 
 rejected on verification.
 
 ```bash
-pytest -q     # 84 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
+pytest -q     # 89 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 84 tests (80 in torch-free CI), ~60s
+pytest -q                        # 89 tests (85 in torch-free CI), ~70s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -142,7 +142,7 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
 - **Signals** (`signals.py`) — real-data positive controls: textbook anomalies (short-term
   reversal, 12-1 momentum) run through the same harness, so a graph null is provably a real
   absence rather than a pipeline that finds nothing.
-- **Costs** (`costs.py`) — the decile long-short a signal implies, net of transaction costs:
+- **Costs** (`costs.py`) — the quintile (q=0.2) long-short a signal implies, net of transaction costs:
   breakeven bps and net Sharpe. Turns "cost-fragile" into a number (reversal breaks even at
   ~0.9 bp → arbitraged net). A gross IC without this is how backtests lie.
 - **Conditioning** (`conditioning.py`) — liquidity-tercile analysis: is reversal an
@@ -182,6 +182,13 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   observationally equivalent to transmission in this design (simulation: exposure alone can
   produce +0.10–0.22), so the claim is "volatility-relevant information travels with the
   co-holding topology," never causal spillover. Own persistence still dominates (+0.510).
+- **Overfitting hardening** (`overfit.py`, Run 12) — the López-de-Prado battery applied to the
+  repo's own positives: **CSCV/PBO** over the reversal signal's pre-registered 3×3 config grid
+  (each config converted to a DAILY series via Jegadeesh–Titman overlapping tranches — mixed
+  horizons don't share a date axis otherwise; all 12,870 splits enumerated; PBO convention
+  pinned for odd N, noise ⇒ 4/9) and the **deflated Sharpe** at N ∈ {9, 25, 100} with the
+  repo's HAC standard via T_eff. Verdict: PBO 0.437 ≈ noise and DSR 0.74–0.62 — the reversal
+  control is a real association but **not a validated strategy**, reported at full prominence.
 - **Reproducibility** (`data/snapshot.py` + `data_manifest.json`) — pinned universe/dates and a
   content hash of the fetched prices (Yahoo ToS prevents shipping the data itself). Honest
   caveat: Yahoo **retroactively re-adjusts** historical closes for every later split/dividend,
@@ -204,7 +211,7 @@ return claims require the PIT path.**
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · risk[covariance/GMVP] · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[GConvGRU])
                 data/   (download · universe[PIT membership] · cusip_map.csv)
-tests/          84 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/volspill/control/cost/conditioning harness
+tests/          89 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/volspill/overfit[PBO·DSR]/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```
