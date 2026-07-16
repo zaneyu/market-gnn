@@ -74,14 +74,14 @@ names, a silent synthetic-data fallback, an FDR that pooled null controls, and a
 that was never actually computed — plus the reviewer claims that were rejected on verification.
 
 ```bash
-pytest -q     # 76 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
+pytest -q     # 77 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 76 tests (72 in torch-free CI), ~40s
+pytest -q                        # 77 tests (73 in torch-free CI), ~40s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -191,7 +191,7 @@ return claims require the PIT path.**
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · risk[covariance/GMVP] · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[GConvGRU])
                 data/   (download · universe[PIT membership] · cusip_map.csv)
-tests/          76 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/control/cost/conditioning harness
+tests/          77 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```

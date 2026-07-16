@@ -56,7 +56,10 @@ def test_ledoit_wolf_shrinks_and_conditions():
     S = risk.sample_cov(R)
     cov, shrink = risk.ledoit_wolf_cc(R)
     # pin the shrinkage intensity (any wrong-but-in-[0,1] value would still improve
-    # conditioning, so a conditioning-only assert can't validate the pi/rho/gamma math)
+    # conditioning, so a conditioning-only assert can't validate the pi/rho/gamma math).
+    # NOTE: pinned to the numpy default_rng(0) stream; numpy keeps Generator.normal stable
+    # in practice but doesn't contractually guarantee it — if this ever fails after a numpy
+    # upgrade with a value still in ~[0.75, 0.95], re-pin rather than suspect the formula.
     assert shrink == pytest.approx(0.818, abs=0.02)
     assert np.linalg.cond(cov) < np.linalg.cond(S)  # better conditioned than sample
     # regime check: with abundant data AND heterogeneous (2-block) correlations — where the
@@ -87,17 +90,35 @@ def test_rolling_gmvp_returns_is_pit():
     # periods with start+hold <= 80 (obs [0:40]) are entirely before the perturbation
     assert np.allclose(r1[:40], r2[:40])
     assert not np.allclose(r1[40:], r2[40:])  # later periods DO change -> data is actually used
+    # exact-window check (catches the classic off-by-one where the window includes the
+    # rebalance-day row, which the far-future perturbation above cannot detect): the first
+    # period must be EXACTLY hold-returns of the GMVP built from rows [0:window)
+    w0 = risk.gmvp_weights(risk.sample_cov(R[0:40]))
+    assert np.allclose(r1[:5], R[40:45] @ w0)
 
 
 def test_graph_masked_cov_is_psd():
-    # regression: zeroing off-graph entries of the constant-correlation target breaks PSD;
-    # graph_masked_cov must PSD-project it, else the GMVP optimizes over an indefinite matrix
-    R, adj, _block = _block_market(rho_in=0.6, seed=5)
-    cov = risk.graph_masked_cov(R[:120], adj)
-    assert np.linalg.eigvalsh(cov).min() > -1e-10  # positive semidefinite
-    # a sparse graph on a high-correlation market is exactly where the naive target is indefinite
-    dense = np.ones_like(adj) & ~np.eye(adj.shape[0], dtype=bool)
-    assert np.linalg.eigvalsh(risk.graph_masked_cov(R[:120], dense)).min() > -1e-10
+    """Regression guard for the indefinite-target BLOCKER: a sparse graph that CONTRADICTS a
+    dense one-factor correlation structure makes the naive zeroed target indefinite (a block
+    graph on a block market would not — the zeroed entries are ~0 anyway, which made the first
+    version of this test vacuous under mutation). graph_masked_cov must PSD-project it, else
+    the GMVP optimizes over a non-covariance and returns leverage artifacts."""
+    rng = np.random.default_rng(5)
+    n, T = 30, 120
+    f = rng.normal(0, 0.01, size=T)                     # one dense market factor
+    R = np.sqrt(0.6) * f[:, None] + np.sqrt(0.4) * rng.normal(0, 0.01, size=(T, n))
+    adj = np.zeros((n, n), bool)
+    for i in range(n):                                   # sparse ring — contradicts the factor
+        adj[i, (i + 1) % n] = adj[(i + 1) % n, i] = True
+    # precondition: the RAW (unprojected) target really is indefinite here, so the test
+    # exercises the hard case and fails if the projection is ever removed
+    S = risk.sample_cov(R)
+    F = risk._constant_correlation_target(S)
+    T_raw = np.where(adj, F, 0.0)
+    np.fill_diagonal(T_raw, np.diag(S))
+    assert np.linalg.eigvalsh(T_raw).min() < 0, "precondition: raw target must be indefinite"
+    cov = risk.graph_masked_cov(R, adj)
+    assert np.linalg.eigvalsh(cov).min() > -1e-10  # positive semidefinite after projection
 
 
 # --------------------------------------------------------------- graphical lasso

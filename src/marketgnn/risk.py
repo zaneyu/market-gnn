@@ -141,9 +141,15 @@ def graph_masked_cov(returns: np.ndarray, adj: np.ndarray, *, shrink: float | No
     """Estimator A — graph-informed shrinkage. Σ̂ = δ·T + (1−δ)·S with LW intensity δ applied
     everywhere, where the target T treats the graph as a **conditional-independence prior**:
     on-graph pairs shrink toward the constant-correlation target, off-graph pairs shrink toward
-    **zero** (unlinked ⇒ low covariance), diagonal = sample variances. This is the fair test —
-    if the graph correctly flags weakly-related pairs, shrinking them to zero beats shrinking
-    everything to the same constant correlation (plain Ledoit–Wolf)."""
+    **zero** (unlinked ⇒ low covariance), diagonal set to the sample variances BEFORE the PSD
+    projection below. This is the fair test — if the graph correctly flags weakly-related pairs,
+    shrinking them to zero beats shrinking everything to the same constant correlation (plain LW).
+
+    Note: the eigen-clip PSD projection does not preserve the diagonal exactly — on
+    high-correlation (crisis) windows the projected target's variances can deviate noticeably
+    from the sample variances (extra variance regularization). Verified harmless to the Run 10
+    conclusion (a diagonal-preserving Higham projection gives 1.026x vs 1.017x LW — same null),
+    and required: without the projection the target is indefinite at realistic correlations."""
     S = sample_cov(returns)
     F = _constant_correlation_target(S)
     T = np.where(adj, F, 0.0)              # on-graph -> const-corr, off-graph -> 0
