@@ -255,3 +255,15 @@ def test_regime_spread_detects_concentration():
     out = risk.regime_spread(bench, graph, regime)
     assert out["logvar_ratio_high"] < out["logvar_ratio_low"]  # more benefit (lower ratio) in high
     assert out["spread"] < 0  # high-minus-low benefit is negative (graph helps more in high)
+
+
+def test_format_estimator_table_preserves_tiny_ci_columns():
+    # the CI/MDE columns live on the daily variance-difference scale (~1e-7); a naive
+    # +.4f renders them all as +0.0000 (unreadable). The formatter must keep them legible
+    # while the human-scale columns stay fixed-point.
+    tbl = pd.DataFrame([{"estimator": "x", "realized_vol": 0.1487, "qlike": 1.55,
+                         "vol_vs_lw_ratio": 1.0, "paired_t_vs_lw": -1.55,
+                         "ci_lo": 2.9e-7, "ci_hi": 1.06e-6, "mde": 6.4e-7}])
+    out = risk.format_estimator_table(tbl)
+    assert "2.9e-07" in out and "1.06e-06" in out         # tiny values survive
+    assert "+0.1487" in out and "-1.5500" in out           # human columns fixed-point

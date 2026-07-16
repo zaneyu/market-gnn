@@ -68,10 +68,12 @@ A null is only worth reporting if the pipeline could have found signal. Two guar
   rewire** null stays flat; **purged walk-forward** removes label-overlap leakage; point-in-time
   purity of graph/features/labels is asserted, not assumed.
 
-This repo is held to its own standard: [REVIEW.md](REVIEW.md) logs an adversarial review round
-(four hostile passes) and every bug it found and fixed — a CUSIP map that silently isolated 5
-names, a silent synthetic-data fallback, an FDR that pooled null controls, and a primary endpoint
-that was never actually computed — plus the reviewer claims that were rejected on verification.
+This repo is held to its own standard: [REVIEW.md](REVIEW.md) logs the adversarial review rounds
+it has survived and every bug they found and fixed — a CUSIP map that silently isolated 5 names,
+a silent synthetic-data fallback, an FDR that pooled null controls, a primary endpoint that was
+never actually computed, and (Run 10) a dramatic-looking headline that turned out to be an
+indefinite-covariance leverage artifact, caught pre-merge — plus the reviewer claims that were
+rejected on verification.
 
 ```bash
 pytest -q     # 77 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)

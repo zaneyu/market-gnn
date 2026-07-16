@@ -425,11 +425,22 @@ def main():
     table, regime, meta = evaluate_estimators(prices, provider)
     print(f"universe {prices.shape[1]} names, {meta['n_rebalances']} monthly rebalances "
           f"({meta['start']}..{meta['end']}), 252d window\n")
-    with pd.option_context("display.float_format", lambda v: f"{v:+.4f}"):
-        print(table.to_string(index=False))
+    print(format_estimator_table(table))
     print("\n=== regime conditioning (does the graph help more in high-correlation regimes?) ===")
     with pd.option_context("display.float_format", lambda v: f"{v:+.4f}"):
         print(regime.to_string(index=False))
+
+
+def format_estimator_table(table: pd.DataFrame) -> str:
+    """Render the estimator table with per-column precision: fixed-point for the
+    human-scale columns, significant-figures for the CI/MDE columns — those live on the
+    daily squared-return-difference scale (~1e-7) and a naive +.4f crushes them all to
+    a useless +0.0000."""
+    fixed = lambda v: "     nan" if pd.isna(v) else f"{v:+.4f}"
+    sig = lambda v: "     nan" if pd.isna(v) else f"{v:+.3g}"
+    formatters = {c: (sig if c in ("ci_lo", "ci_hi", "mde") else fixed)
+                  for c in table.columns if c != "estimator"}
+    return table.to_string(index=False, formatters=formatters)
 
 
 if __name__ == "__main__":

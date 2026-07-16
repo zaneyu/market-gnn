@@ -1,11 +1,12 @@
 # Adversarial review & corrections
 
 This repo argues that most "graph alpha" is an artifact you can only catch by trying hard to
-break your own result. So it gets held to the same standard: below is a round of **adversarial
-review** (four independent hostile passes — statistical rigor, 13F data integrity, code
-correctness, and claims-vs-evidence) and every fix it produced. Findings were verified against
-the code/data before acting; a few reviewer claims were **rejected on verification** and are
-noted as such.
+break your own result. So it gets held to the same standard: below are the rounds of
+**adversarial review** it has survived (independent hostile passes over statistical rigor, 13F
+data integrity, code correctness, and claims-vs-evidence) and every fix they produced. Findings
+were verified against the code/data before acting; a few reviewer claims were **rejected on
+verification** and are noted as such. The Run 10 round at the bottom is the cautionary tale: a
+published-looking headline number turned out to be a linear-algebra artifact.
 
 ## Fixed — data & correctness
 
@@ -87,3 +88,39 @@ noted as such.
   smaller **test** config (n=40, 60 epochs), where own-momentum proxies the block spillover; at the
   default run (n=60, 300 epochs) the blindfold is null (−0.012). The test's docstring/assertions
   were corrected to claim only what holds in both configs (the graph adds **incremental** IC).
+
+## Round 3 — Run 10 pre-merge validation: the indefinite-target BLOCKER
+
+Run 10 (graph-structured covariance → minimum-variance portfolio) went through a pre-merge
+validation team (test suite vs main, per-file adversarial review, end-to-end integration).
+It caught a bug the developer, the spec-review loop, AND a first integration pass had all
+rationalized away:
+
+- **The graph shrinkage target was indefinite.** Zeroing off-graph entries of the
+  constant-correlation matrix breaks positive-semidefiniteness at realistic equity correlations
+  (verified: min eigenvalue −3.8e-5; indefinite in 8/13 sampled real windows). A convex
+  combination `δT + (1−δ)S` is only guaranteed PSD when both operands are, so the unconstrained
+  GMVP was optimizing over a **non-covariance** — and the draft's dramatic headline ("naive
+  covariance-space graph injection is 8–12× worse than Ledoit–Wolf; rewire 112×") was a
+  **leverage artifact**, not a covariance-quality measurement. An earlier integration pass had
+  explicitly blessed those numbers as "legitimate unconstrained-GMVP-on-a-bad-covariance
+  behavior". Fixed by eigen-clip **PSD projection** of the target and a **Cholesky-guarded**
+  GMVP (`solve` raises only on exact singularity, never on an indefinite matrix — it silently
+  returns sign-flipped weights). Corrected result: the masked estimators moved from 8–12× LW to
+  **~1.02× (n.s.)** — every graph estimator statistically indistinguishable from Ledoit–Wolf.
+  The conclusion ("the null extends from alpha to risk") survived; the exciting sub-plot did not.
+- **The regression guard was then mutation-tested and found vacuous.** The first PSD test used a
+  block graph on a block market — where the zeroed entries are ~0 anyway, so the raw target is
+  PSD and deleting the fix still passed all tests. Replaced with the hard case (dense one-factor
+  market × sparse ring adjacency that contradicts it) plus a precondition assert that the raw
+  target is indefinite; verified by mutation (removing the projection now fails the test).
+- Smaller catches from the same round: a tautological PIT test (compared two identical arrays;
+  rewritten against the actual rolling-window loop with an exact first-period check), a
+  Ledoit–Wolf test that any wrong-but-in-[0,1] shrinkage would pass (now pins the intensity),
+  a glasso "recovery" test that a one-shot soft-threshold could pass (now requires convergence
+  and Θ≈Z), a fallback test that didn't verify the fallback fired (now exact-matches it), and a
+  locale-dependent SEC date parse from the Run 8 loader that would silently empty the graph on
+  non-English machines (fixed with an explicit month map + raise-on-empty guards).
+
+Moral, twice over: the number that makes the best story is the one to distrust first — and a
+regression test isn't a guard until you've watched it fail.
