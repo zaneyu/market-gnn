@@ -76,14 +76,14 @@ indefinite-covariance leverage artifact, caught pre-merge — plus the reviewer 
 rejected on verification.
 
 ```bash
-pytest -q     # 83 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
+pytest -q     # 84 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 83 tests (79 in torch-free CI), ~60s
+pytest -q                        # 84 tests (80 in torch-free CI), ~60s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -176,7 +176,8 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   confounded by graph-clustered vol levels, and the rewire null is blind to that) predict own
   forward vol beyond own σ20 AND σ250? Planted spatial-ARCH recovery proves power; a
   control-validation test proves the innovation design kills the level confound. Finding: the
-  repo's **first real-data positive graph row** — +0.038, HAC t 2.65, FDR-sig, rewire-clean —
+  repo's **first real-data positive graph row** — +0.038, HAC t 2.65, FDR-sig, rewire-clean,
+  sitting exactly at the design's MDE (borderline-powered, not a precise magnitude) —
   reported with its pre-registered identification limit: shared factor-vol *exposure* is
   observationally equivalent to transmission in this design (simulation: exposure alone can
   produce +0.10–0.22), so the claim is "volatility-relevant information travels with the
@@ -203,7 +204,7 @@ return claims require the PIT path.**
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · risk[covariance/GMVP] · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[GConvGRU])
                 data/   (download · universe[PIT membership] · cusip_map.csv)
-tests/          83 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/volspill/control/cost/conditioning harness
+tests/          84 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/volspill/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```

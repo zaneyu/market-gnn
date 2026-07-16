@@ -95,7 +95,8 @@ def run_volspill(prices: pd.DataFrame, *, graph_provider, lookback: int = 20,
             t = idx[i]
             g = graph_provider[kind](t, seed)
             sig = neighbour_innovation(innov.iloc[i], g)
-            fwd = rets.iloc[i + 1:i + 1 + horizon].std(ddof=1).reindex(sig.index)
+            fwd_win = rets.iloc[i + 1:i + 1 + horizon]
+            fwd = fwd_win.std(ddof=1).where(fwd_win.notna().sum() >= horizon).reindex(sig.index)
             recs.append(pd.DataFrame({
                 "date": t, "asset": sig.index, "sig": sig.to_numpy(),
                 "own_s": vol_s.iloc[i].reindex(sig.index).to_numpy(),
@@ -178,8 +179,11 @@ def confound_probe(prices: pd.DataFrame, graph: G.Graph, *, lookback: int = 20,
         fwd = rets.iloc[i + 1:i + 1 + horizon].std(ddof=1)
         own_s = vol_s.iloc[i]
         own_l = vol_l.iloc[i]
-        naive_sig = neighbour_innovation(own_s, graph)          # LEVEL signal (neighbour σ20)
-        innov_sig = neighbour_innovation(innov.iloc[i], graph)  # innovation signal
+        # reindex signals to the price-column order: rank_ic pairs positionally, and a
+        # provider graph with reordered nodes would otherwise silently misalign
+        cols = prices.columns
+        naive_sig = neighbour_innovation(own_s, graph).reindex(cols)          # LEVEL signal
+        innov_sig = neighbour_innovation(innov.iloc[i], graph).reindex(cols)  # innovation
         r1 = _residualize_multi(fwd.to_numpy(), own_s.to_numpy())
         r2 = _residualize_multi(fwd.to_numpy(), np.column_stack([own_s, own_l]))
         naive_ics.append(rank_ic(naive_sig.to_numpy(), r1))

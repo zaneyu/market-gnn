@@ -48,6 +48,11 @@ def test_neighbour_innovation_excludes_self_and_handles_nan():
     innov3 = innov.copy()
     innov3["B"] = innov3["C"] = np.nan
     assert np.isnan(volspill.neighbour_innovation(innov3, g)["A"])  # all-NaN -> NaN
+    # edge WEIGHTS are actually applied (a plain mean would return 0.03 here)
+    gw = G.edges_from_pairs(pd.DataFrame({"src": ["A", "A"], "dst": ["B", "C"],
+                                          "weight": [3.0, 1.0]}), nodes, symmetric=True)
+    outw = volspill.neighbour_innovation(innov, gw)
+    assert outw["A"] == pytest.approx((3 * 0.02 + 1 * 0.04) / 4)  # 0.025, not 0.03
 
 
 # --------------------------------------------------------------- planted power
@@ -101,3 +106,20 @@ def test_fdr_family_excludes_controls():
     assert ctrl["q"].isna().all()
     fam = table[(table["edges"] == "coholding")]
     assert fam["q"].notna().all()             # the discovery family gets real q-values
+
+
+def test_run_volspill_kills_confound_in_production_path():
+    """Test 4b — the PRODUCTION-path confound guard. Test 4 validates confound_probe, a
+    parallel implementation; mutation testing showed run_volspill's own signal/control
+    wiring could be silently degraded (level signal, dropped sigma250 regressor) with all
+    other tests green — the fully-confounded mutation reports a spurious FDR-significant
+    +0.27 on this very market. So the real table-producing loop must itself be run on the
+    gamma=0 clustered-level market and come back ~null."""
+    prices, graph = volspill.make_synthetic_spatial_arch(
+        gamma=0.0, beta=0.85, block_omega_spread=1.0, seed=1)
+    table = volspill.run_volspill(prices, graph_provider=_static_provider(graph),
+                                  warmup=260)
+    row = {(r["edges"], r["signal"]): r for r in table.to_dict("records")}
+    resid = row[("coholding", "spill_resid")]
+    assert abs(resid["mean_ic"]) < 0.05, f"production loop leaks the confound: {resid['mean_ic']:.4f}"
+    assert not resid["fdr_sig"]
