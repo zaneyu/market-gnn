@@ -280,7 +280,52 @@ significance (t < 1). So the earlier lead-lag nulls were **not a modelling limit
 linear zero-parameter read and a learned spatiotemporal network reach the same answer on these
 names. Same conclusion, one more escape hatch (\"you just needed a bigger model\") closed.
 
-## Headline (nine runs)
+## Run 10 — graphs for RISK, not alpha: graph-structured covariance & the min-variance portfolio
+
+Runs 1–9 asked whether the graph adds cross-sectional *return* signal (no). Covariance estimation
+is a different problem where structural priors are *known* to help — that is why Ledoit–Wolf
+shrinkage exists. So the honest question: does the graph help **risk** even though it doesn't help
+**alpha**? Build a graph-structured covariance, form the **global minimum-variance portfolio**
+(GMVP), and measure out-of-sample realized volatility. The 13F co-holding graph is the headline
+structure (built from *holdings, not returns*, so regularizing a *return* covariance with it is a
+genuine external prior). Two ways the graph enters: **A** a graph-informed shrinkage target
+(off-graph pairs shrink toward zero), **B** a per-edge **graphical lasso** on the precision matrix.
+Every graph estimator must beat a degree-preserving **rewire** of the same graph. Metrics: QLIKE
+(the standard proper variance-forecast loss) and annualized GMVP realized vol, with a paired
+HAC/block-bootstrap test vs Ledoit–Wolf. (`python -m marketgnn.risk`; 90 large-caps, 101 monthly
+rebalances 2016–2024, 252-day window.)
+
+| estimator | realized vol | QLIKE | vol vs LW | paired t vs LW |
+|-----------|-------------|-------|-----------|----------------|
+| sample | 16.5% | 2.81 | 1.11 | +6.06 |
+| diagonal | 16.2% | 38.3 | 1.09 | +3.09 |
+| **ledoit_wolf** | **14.9%** | **1.55** | 1.00 | — |
+| masked (co-holding, cov-space) | 124.6% | 27.5 | 8.38 | +2.28 |
+| masked (correlation, cov-space) | 183.3% | 146.9 | 12.33 | +1.91 |
+| **glasso (co-holding, precision)** | **14.6%** | 1.82 | **0.98** | **−1.55** |
+| rewire null (co-holding) | 1659% | — | 111.6 | — |
+
+**Read — the injection method is everything, and the net verdict is a wash.** Naive
+**covariance-space** graph shrinkage is *catastrophic* (8–12× LW's vol): large-cap covariance is
+dominated by a dense **market factor** that a sparse economic-link graph cannot represent, so
+zeroing off-graph *covariances* throws away the dominant risk (the rewire null, 112×, confirms
+random sparsity is nonsense). But **precision-space** graph sparsity — a graphical lasso penalizing
+off-graph *partial* correlations — preserves the market factor and lands **statistically
+indistinguishable from Ledoit–Wolf**: realized vol 14.6% vs 14.9% (ratio 0.98, paired HAC t −1.55,
+not significant), QLIKE marginally *worse*. Regime-conditioned, glasso's marginal edge is ~uniform
+across high- and low-correlation periods (log-var ratio −0.038 vs −0.034, spread −0.005) — no crisis
+concentration.
+
+So the null extends from alpha to **risk**: the co-holding graph adds no *significant* covariance
+improvement over standard shrinkage on liquid large-caps. Unlike the return channel, a correctly
+specified graph estimator at least *matches* the benchmark rather than hurting — and the 50×+ gap
+between precision-space and covariance-space injection is itself the useful lesson. Bracketed as
+always by a **positive control** (on a synthetic block market where the graph genuinely *is* the
+covariance structure, the same estimator beats sample and rewire — the harness has power) and the
+**rewire null**, so the wash is a real absence, not a broken test. Glasso penalties are fixed
+a-priori, so "indistinguishable" doesn't lean on tuning.
+
+## Headline (ten runs)
 
 The contemporaneous graph is a **red herring** (Runs 1-2: frozen ≈ dynamic ≈ none; GNN ≈ MLP).
 The lead-lag channel — the only one that *should* carry return signal — is a **powered null on
@@ -293,6 +338,12 @@ is ~90% persistence (Run 3), and inclusion-timing correction shrinks the already
 A **learned spatiotemporal model** (GConvGRU, Run 9) — given the real link *and* the
 capacity to use time — reaches the same null (graph +0.006 vs no-graph +0.007, both n.s.),
 after recovering a planted effect (+0.067, t 3.9); so the null is not a modelling limitation.
+
+The null even extends to **risk** (Run 10): a graph-structured covariance feeding a minimum-variance
+portfolio adds no *significant* out-of-sample vol reduction over Ledoit–Wolf — precision-space
+graphical lasso ties it (ratio 0.98, t −1.55 n.s.), covariance-space shrinkage is 8× *worse* (the
+dense market factor a sparse graph can't represent) — bracketed by a block-structure positive
+control and a catastrophic rewire null.
 
 The **pre-registered primary endpoint (H1)** is tested directly, not eyeballed: the *paired*
 per-date IC-difference series (GNN minus MLP on the same dates/universe) with a HAC t and

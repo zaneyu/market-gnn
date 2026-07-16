@@ -74,14 +74,14 @@ names, a silent synthetic-data fallback, an FDR that pooled null controls, and a
 that was never actually computed — plus the reviewer claims that were rejected on verification.
 
 ```bash
-pytest -q     # 62 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
+pytest -q     # 76 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 62 tests (58 in torch-free CI), ~40s
+pytest -q                        # 76 tests (72 in torch-free CI), ~40s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -159,6 +159,14 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   the committed, auditable ticker→CUSIP map, **check-digit-validated and coverage-tested** so a
   bond/depositary/placeholder identifier can't silently isolate a name (the bug this review
   caught for BAC/SCHW/DIS/AMT/SPG).
+- **Risk, not alpha** (`risk.py`) — the honest reframe: graphs add no *return* signal, but does a
+  graph-structured **covariance** beat standard shrinkage? Builds a graph-informed covariance (a
+  conditional-independence shrinkage target and a per-edge **graphical lasso** on the precision
+  matrix), forms the **global minimum-variance portfolio**, and scores out-of-sample realized vol
+  and QLIKE against Ledoit–Wolf, with a degree-preserving rewire null and a block-structure
+  positive control. Finding (Run 10): still a wash — precision-space graphical lasso *ties* LW
+  (vol ratio 0.98, t −1.55 n.s.), naive covariance-space shrinkage is 8× worse (a sparse graph
+  can't represent the dense market factor). The null extends from alpha to risk.
 - **Reproducibility** (`data/snapshot.py` + `data_manifest.json`) — pinned universe/dates and a
   content hash of the fetched prices (Yahoo ToS prevents shipping the data itself). Honest
   caveat: Yahoo **retroactively re-adjusts** historical closes for every later split/dividend,
@@ -178,10 +186,10 @@ return claims require the PIT path.**
 ## Layout
 
 ```
-src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · figures · train
+src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · risk[covariance/GMVP] · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[GConvGRU])
                 data/   (download · universe[PIT membership] · cusip_map.csv)
-tests/          62 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/control/cost/conditioning harness
+tests/          76 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```
@@ -191,9 +199,11 @@ paper/note.md   writeup
 Both graph channels are tested — contemporaneous (Runs 1–2) and strictly-lagged spillover
 (Run 5) — over the correlation/industry proxy *and* over a **real 13F co-holding graph**
 (Run 8), with both a zero-parameter read and a **learned GConvGRU** (Run 9), all powered
-nulls. Remaining extensions: (1) a small/illiquid universe where the lead-lag effect is
-documented to survive; (2) delisted-price data (CRSP) for a fully survivorship-free PIT run;
-(3) supplier–customer links from 10-K segments as a second real economic graph.
+nulls; and the null is shown to extend from **alpha to risk** (Run 10: graph-structured
+covariance vs Ledoit–Wolf for the min-variance portfolio). Remaining extensions: (1) a
+small/illiquid universe where the lead-lag effect is documented to survive; (2) delisted-price
+data (CRSP) for a fully survivorship-free PIT run; (3) supplier–customer links from 10-K
+segments as a second real economic graph.
 
 ## License
 

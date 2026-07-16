@@ -65,6 +65,13 @@ See RESULTS.md for full tables. Summary:
   over dates) recovers the planted lead-lag (+0.067, t 3.9; blindfold −0.012, n.s.) then nulls on
   the real co-holding graph (+0.006 vs no-graph +0.007, both n.s.). Closes the "you just needed a
   bigger model" escape hatch.
+- **Run 10 — the null extends to RISK.** Covariance estimation is where structural priors are
+  *known* to help (Ledoit–Wolf), so we ask whether a graph-structured covariance improves the
+  out-of-sample **minimum-variance portfolio**. Injection method is decisive: naive
+  covariance-space graph shrinkage is 8–12× *worse* than Ledoit–Wolf (a sparse graph can't
+  represent the dense market factor), while a precision-space **graphical lasso** ties it (realized
+  vol ratio 0.98, paired HAC t −1.55 n.s.). No significant risk improvement — bracketed by a
+  block-structure positive control and a catastrophic (112×) rewire null.
 - **Primary endpoint (H1), tested directly.** The pre-registered GNN-vs-matched-MLP comparison is
   a *paired* per-date IC-difference test (HAC t + block-bootstrap CI + MDE), reported outside the
   FDR family — not two eyeballed IC-vs-zero rows. It isolates the incremental value of message-
