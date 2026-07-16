@@ -73,6 +73,15 @@ See RESULTS.md for full tables. Summary:
   while plain sample/diagonal are significantly worse. The real graph edges its own degree-preserving
   rewire but not significantly. No graph structure meaningfully improves covariance estimation on
   large-caps — bracketed by a block-structure positive control that proves the harness has power.
+- **Run 11 — the one positive, with its identification ceiling.** Neighbours' volatility
+  *innovations* (short vol vs own long-run level — a vol-*level* signal is structurally
+  confounded by graph-clustered levels) carry FDR-significant incremental information about own
+  forward volatility along the real co-holding topology (+0.038, HAC t 2.65, rewire-clean;
+  planted spatial-ARCH recovery proves power, a control-validation test proves the level
+  confound is killed). Pre-registered limit: heterogeneous factor-vol *exposure* is
+  observationally equivalent to transmission in this design (simulated exposure alone produces
+  +0.10–0.22), so the claim is "volatility-relevant information travels with the topology,"
+  not causal spillover. Own persistence dominates (+0.510, t 28).
 - **Primary endpoint (H1), tested directly.** The pre-registered GNN-vs-matched-MLP comparison is
   a *paired* per-date IC-difference test (HAC t + block-bootstrap CI + MDE), reported outside the
   FDR family — not two eyeballed IC-vs-zero rows. It isolates the incremental value of message-
@@ -101,7 +110,7 @@ pull (synthetic evidence is deterministic); transaction costs excluded (predicta
 weekly cadence power (mitigated by reporting MDE).
 
 ## 7. Reproducibility
-`pip install -e ".[dev,gnn]"`; `pytest -q` (77 tests; 3 GNN/temporal skip without torch, 1 skips
+`pip install -e ".[dev,gnn]"`; `pytest -q` (83 tests; 3 GNN/temporal skip without torch, 1 skips
 without the fetched 13F data); `python -m marketgnn.leadlag --synthetic-planted` (planted
 recovery); `python -m marketgnn.coholding` (real 13F graph); `python -m marketgnn.models.temporal
 --synthetic-planted` (GConvGRU power); `python -m marketgnn.train --synthetic --models

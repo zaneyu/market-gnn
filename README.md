@@ -76,14 +76,14 @@ indefinite-covariance leverage artifact, caught pre-merge — plus the reviewer 
 rejected on verification.
 
 ```bash
-pytest -q     # 77 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
+pytest -q     # 83 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 77 tests (73 in torch-free CI), ~40s
+pytest -q                        # 83 tests (79 in torch-free CI), ~60s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -171,6 +171,16 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   from Ledoit–Wolf (all |t| < 1.96), while plain sample/diagonal are significantly worse; the real
   graph edges its own rewire but not significantly. No graph structure meaningfully improves
   covariance estimation here.
+- **Vol spillover** (`volspill.py`, Run 11) — the Diebold–Yilmaz-inspired channel: do
+  neighbours' **vol innovations** (σ20 − σ250; a naive vol-*level* signal is structurally
+  confounded by graph-clustered vol levels, and the rewire null is blind to that) predict own
+  forward vol beyond own σ20 AND σ250? Planted spatial-ARCH recovery proves power; a
+  control-validation test proves the innovation design kills the level confound. Finding: the
+  repo's **first real-data positive graph row** — +0.038, HAC t 2.65, FDR-sig, rewire-clean —
+  reported with its pre-registered identification limit: shared factor-vol *exposure* is
+  observationally equivalent to transmission in this design (simulation: exposure alone can
+  produce +0.10–0.22), so the claim is "volatility-relevant information travels with the
+  co-holding topology," never causal spillover. Own persistence still dominates (+0.510).
 - **Reproducibility** (`data/snapshot.py` + `data_manifest.json`) — pinned universe/dates and a
   content hash of the fetched prices (Yahoo ToS prevents shipping the data itself). Honest
   caveat: Yahoo **retroactively re-adjusts** historical closes for every later split/dividend,
@@ -193,7 +203,7 @@ return claims require the PIT path.**
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · risk[covariance/GMVP] · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[GConvGRU])
                 data/   (download · universe[PIT membership] · cusip_map.csv)
-tests/          77 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/control/cost/conditioning harness
+tests/          83 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/risk[covariance]/volspill/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```
@@ -203,11 +213,12 @@ paper/note.md   writeup
 Both graph channels are tested — contemporaneous (Runs 1–2) and strictly-lagged spillover
 (Run 5) — over the correlation/industry proxy *and* over a **real 13F co-holding graph**
 (Run 8), with both a zero-parameter read and a **learned GConvGRU** (Run 9), all powered
-nulls; and the null is shown to extend from **alpha to risk** (Run 10: graph-structured
-covariance vs Ledoit–Wolf for the min-variance portfolio). Remaining extensions: (1) a
-small/illiquid universe where the lead-lag effect is documented to survive; (2) delisted-price
-data (CRSP) for a fully survivorship-free PIT run; (3) supplier–customer links from 10-K
-segments as a second real economic graph.
+nulls; the null extends from **alpha to risk** (Run 10: graph-structured covariance vs
+Ledoit–Wolf for the min-variance portfolio); and the one channel that lights up —
+**volatility information along the topology** (Run 11) — is reported with its pre-registered
+identification limit. Remaining extensions: (1) a small/illiquid universe where the lead-lag
+effect is documented to survive; (2) delisted-price data (CRSP) for a fully survivorship-free
+PIT run; (3) supplier–customer links from 10-K segments as a second real economic graph.
 
 ## License
 

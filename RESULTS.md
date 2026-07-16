@@ -327,7 +327,56 @@ shrinking — a naive off-graph-zeroing target is indefinite at realistic correl
 earlier draft's unconstrained GMVP turned into 8–12× leverage artifacts; the pre-merge review team
 caught it. Glasso penalties are fixed a-priori, so "indistinguishable" doesn't lean on tuning.)*
 
-## Headline (ten runs)
+## Run 11 — volatility spillover over the co-holding graph (DY-inspired)
+
+The last untested channel: does a neighbour's volatility shock carry information about a
+stock's *future* volatility beyond the stock's own vol history? Run 3's lesson makes the
+control load-bearing (~90% of vol "predictability" is own persistence), and the design review
+added two more layers: the signal is the neighbour **vol innovation** (σ20 − σ250 — a naive
+neighbour-vol-*level* signal is structurally confounded by graph-clustered vol levels, spurious
+IC +0.36 in simulation, and the rewire null is blind to it), residualized on **both** own σ20
+and σ250. **Pre-registered identification limit:** heterogeneous dynamic factor-vol *exposure*
+(sector/block vol regimes among co-held names) is observationally equivalent to transmission in
+this design — simulation shows it alone can produce resid IC +0.10–0.22 at zero transmission —
+so a positive is read as "incremental predictive information along the topology," never causal
+spillover. (`python -m marketgnn.volspill`; h=20d, non-overlapping, n=125 dates pre-registered.)
+
+**First, power (planted spatial-ARCH, γ=0.35, stationary):**
+
+| edges | signal | mean IC | HAC t | MDE₈₀ | FDR sig |
+|-------|--------|---------|-------|-------|---------|
+| coholding | spill_resid | +0.126 | 5.67 | 0.066 | **yes** |
+| rewire | spill_resid | +0.007 | 0.51 | 0.045 | no |
+| (none) | own_vol | +0.203 | 6.87 | 0.085 | no |
+
+The pipeline recovers the planted spillover in the residualized reading, the own-vol control
+does not absorb it, and the rewire finds nothing. (The control-validation test separately
+proves the two-regressor design kills the pure level confound: naive +0.36 → innovation −0.003.)
+
+**Then real data (90 large-caps, 2014–2024, 125 non-overlapping dates):**
+
+| edges | signal | mean IC | HAC t | p | MDE₈₀ | FDR sig |
+|-------|--------|---------|-------|------|-------|---------|
+| coholding | spill_raw | −0.038 | −1.15 | 0.25 | 0.089 | no |
+| **coholding** | **spill_resid** | **+0.038** | **+2.65** | **0.008** | 0.038 | **yes** |
+| rewire | spill_resid | +0.009 | +1.19 | 0.23 | 0.027 | no |
+| (none) | own_vol | +0.510 | +28.1 | <0.001 | 0.049 | no |
+
+**Read — the repo's first real-data positive graph row, reported with its pre-registered
+epistemic ceiling.** After controlling own vol (short and long), neighbours' vol innovations
+carry **FDR-significant incremental information** about a stock's forward volatility along the
+real co-holding topology (+0.038, t 2.65, sitting exactly at the design's MDE), and the
+degree-preserving rewire is clean — so the information travels through *this* topology, not any
+random graph of the same degree. What it does NOT establish: directed transmission. The
+pre-registered confound simulation shows shared factor-vol exposure alone can generate resid IC
++0.10–0.22 — larger than the +0.038 observed — so the honest statement is: **co-holding topology
+carries volatility-relevant information beyond own history (significant, rewire-clean); whether
+that is transmission or shared factor-vol exposure is unidentifiable in this design** (as it is
+in standard Diebold–Yilmaz connectedness without identification assumptions). Own persistence
+remains overwhelmingly dominant (+0.510 vs +0.038) — the graph adds a sliver, not a regime
+change. Return channels: still all null.
+
+## Headline (eleven runs)
 
 The contemporaneous graph is a **red herring** (Runs 1-2: frozen ≈ dynamic ≈ none; GNN ≈ MLP).
 The lead-lag channel — the only one that *should* carry return signal — is a **powered null on
@@ -347,6 +396,13 @@ portfolio adds no *significant* out-of-sample vol reduction over Ledoit–Wolf �
 indistinguishable from LW (all |t| < 1.96), while plain sample/diagonal are significantly worse.
 The real graph edges its own rewire but not significantly — bracketed by a block-structure positive
 control that proves the harness has power.
+
+The one channel that *does* light up is **volatility information** (Run 11): neighbours' vol
+innovations carry FDR-significant incremental information about own forward vol along the real
+co-holding topology (+0.038, t 2.65, rewire-clean) — but the pre-registered identification limit
+applies: shared factor-vol exposure alone can generate more than that in simulation, so it is
+"information along the topology," not demonstrated transmission. Own persistence still dominates
+(+0.510). Return channels: all null.
 
 The **pre-registered primary endpoint (H1)** is tested directly, not eyeballed: the *paired*
 per-date IC-difference series (GNN minus MLP on the same dates/universe) with a HAC t and
