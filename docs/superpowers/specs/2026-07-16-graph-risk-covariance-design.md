@@ -1,0 +1,233 @@
+# Run 10 — Graphs for risk, not alpha: graph-structured covariance & the minimum-variance portfolio
+
+**Status:** approved design (2026-07-16). Single-module extension to market-gnn.
+
+## Motivation
+
+Runs 1–9 established that a stock-relationship graph adds **no cross-sectional return
+signal** that survives leak-free, powered, control-checked evaluation. But covariance
+estimation is a *different* problem where structural priors are known to help (that is the
+entire reason Ledoit–Wolf shrinkage exists): with n≈90 assets and short trailing windows the
+sample covariance is ill-conditioned. A graph is a structural prior. So the honest question
+is whether graphs help **risk** even though they don't help **alpha** — a nuanced, truthful
+reframe that is a *positive-result* direction rather than another null.
+
+## Scientific question
+
+> Does knowing a stock-relationship graph improve **out-of-sample covariance estimation** —
+> measured by the realized volatility of the global minimum-variance portfolio (GMVP) —
+> beyond standard estimators (sample, Ledoit–Wolf)? And does any benefit **concentrate in
+> high-correlation / crisis regimes**?
+
+## Critical design decision — which graph (non-circularity)
+
+The **13F co-holding graph is the headline structure**, because it is built from *holdings,
+not returns* — so using it to regularize a *return* covariance is a genuine external prior,
+not a tautology. A correlation-kNN graph regularizing a return covariance is near-circular
+(same information), so it appears **only as a clearly-labeled reference ceiling**, never as
+the reported result. This is the choice that makes the finding meaningful.
+
+## Graph → dense adjacency (prerequisite for A and B)
+
+Both graph estimators need a **symmetric dense boolean adjacency aligned to the covariance's
+asset order**, which the `Graph` object does not provide (it exposes only `edge_index [2,E]` into
+`graph.nodes`). Specify a helper:
+
+- `dense_adjacency(graph, nodes) -> np.ndarray[n,n] (bool)`: assert `list(graph.nodes) == list(nodes)`
+  (hard fail on mismatch — prevents the silent wrong-asset corruption when a provider is built in
+  `cusip_map` order but the covariance uses `prices.columns` order); scatter `edge_index` into a
+  matrix; **symmetrize** `A = A | A.T` (required because `correlation_knn` is a *directed* top-k
+  graph — an asymmetric mask would make the target/penalty non-symmetric and `Σ̂` not a valid
+  covariance). The graph provider is built with `nodes = list(prices.columns)` so alignment holds.
+
+## Estimators
+
+Baselines (no graph):
+- **sample** — S (trailing-window sample covariance; complete-case, see NaN policy below).
+- **ledoit_wolf** — linear shrinkage of S toward the constant-correlation target (the standard
+  to beat).
+- **diagonal** — diagonal of S (a floor; ignores all covariance).
+
+Graph estimators (headline graph = co-holding; reference = correlation-kNN):
+- **A — graph-masked shrinkage.** `Σ̂ = δ·T + (1−δ)·S`, where the target `T` keeps S on graph
+  edges (i,j with `A_ij=1`) and replaces off-graph entries with the constant-correlation target.
+  δ chosen by the Ledoit–Wolf-optimal intensity (fallback: a purged-CV grid). T is symmetric by
+  construction from the symmetrized adjacency.
+- **B — graph-penalized graphical lasso.** Sparse precision matrix Θ with a **per-edge** L1
+  penalty matrix Λ (low `edge_penalty` on graph edges, high `offedge_penalty` off-graph; diagonal
+  unpenalized). Solved by a **numpy-only ADMM** with a fully specified numerical contract:
+  - Pre-condition the input: `S ← S + ε·tr(S)/n · I` (ε=1e-3) so it is SPD before solving.
+  - ADMM: **Θ-update** = eigendecompose the symmetric `M = ρ(Z−U) − S` and map its eigenvalues
+    `d_i ↦ (d_i + √(d_i²+4ρ))/(2ρ)` (analytic prox of −logdet; always yields PD Θ); **Z-update** by
+    element-wise soft-threshold of `Θ+U` at `Λ/ρ` (diagonal unpenalized); scaled dual update
+    `U ← U + Θ − Z`; parameters `rho=1.0`, `tol=1e-4` (primal+dual residual), `max_iter=100`.
+  - Guards: symmetrize each iterate; on non-convergence at `max_iter` **or** a non-PD Θ, **fall
+    back to estimator A** (logged), never return a non-invertible matrix. `Σ̂ = Θ⁻¹` via `solve`.
+  - If B proves too unstable on real data in practice, Run 10 ships with A as the headline and B
+    reported as a secondary; the design does not depend on B succeeding.
+
+## The null (same rigor as the rest of the repo)
+
+Every graph estimator is re-run with a **degree-preserving rewired** co-holding graph
+(`graph.degree_preserving_rewire`), **averaged over ≥3 seeds** (matching `run_leadlag`'s
+`rewire_seeds=(0,1,2)` — one Maslov–Sneppen draw is a noisy null). The real graph must beat its
+own rewire, or the benefit is just sparsity/degree, not *topology*.
+
+## Evaluation protocol
+
+- **Universe / data:** the existing 90 large-caps (`default_universe`, cached parquet); the
+  co-holding graph from the cached 13F snapshots (PIT public-date logic already built). The
+  graph provider is built with `nodes = list(prices.columns)` so adjacency aligns to the cov.
+- **Windows — a manual rolling rebalance loop** (NOT `PurgedWalkForward`, whose expanding
+  train/test-block + overlapping-label-purge API is built for cross-sectional IC and cannot
+  express a fixed trailing window + monthly rebalance + hold-to-next; the repo's own holding-
+  period evaluations in `leadlag.py`/`conditioning.py` roll a manual loop, and this follows that
+  pattern). Concretely: `rebal = [d for d in rebalance_dates(prices.index, "M") if pos(d) >= window]`;
+  at each `d`, estimate `Σ̂ = estimator(rets.loc[:d].iloc[-window:])` (returns strictly ≤ d),
+  form `w = gmvp(Σ̂)`, and record the realized portfolio return over `(d, next_rebal]` (strictly
+  forward). `window = 252` trading days, monthly rebalance, no lookahead by construction (window
+  ends at d, holding starts after d — no overlap, so no purge needed).
+- **Portfolio:** unconstrained GMVP, `w ∝ Σ̂⁻¹ 1`, normalized to `1ᵀw = 1`. Unconstrained
+  because long-only constraints mask covariance-quality differences. Long-only GMVP reported as
+  a robustness check only. NaN/inversion policy in the Portfolio section below.
+- **Primary metric — QLIKE** (the repo already has `evaluate.qlike`, the standard noise-robust
+  proper loss for variance forecasts; it sidesteps the mean-vs-variance confound below).
+  **Horizon must match** (QLIKE differentials are not scale-invariant): the forecast `wᵀΣ̂w` is a
+  **daily** variance (Σ̂ is estimated from daily returns), so the realized proxy is the **mean
+  daily squared portfolio return over the holding period** `(d, next_rebal]` (same daily
+  horizon) — NOT the squared ~21-day holding return. Lower QLIKE = better. **Co-primary:**
+  annualized OOS realized volatility of each estimator's GMVP (the interpretable number).
+  Note: `evaluate.qlike` returns the *aggregated* mean loss; the paired DM test (below) needs the
+  **per-period** QLIKE summand `r/f − log(r/f) − 1`, computed inline, not the aggregate.
+- **Significance (paired, correctly specified):** neither `block_bootstrap_ci` nor
+  `newey_west_tstat` is paired — each tests the *mean of one series* — so the paired **difference
+  series is formed by hand first** (as `conditioning.py` does with `spread = low − high`):
+  - Realized-vol comparison: `d_t = (r^est_t − r̄^est)² − (r^LW_t − r̄^LW)²` — squared **demeaned**
+    returns (raw squared returns test `Var + mean²`, not volatility), then `newey_west_tstat(d)`
+    (HAC) and `block_bootstrap_ci(d, block=3)` — a small block, not iid (`block=1`), since squared
+    returns exhibit volatility clustering; the non-overlapping monthly holdings mute but don't
+    remove the autocorrelation, so the CI matches the HAC treatment.
+  - QLIKE comparison: Diebold–Mariano-style — `newey_west_tstat(qlike^est − qlike^LW)`.
+  - Vol **ratio** `√(mean a²/mean b²)`: a small dedicated ratio-bootstrap (the existing CI helper
+    cannot produce a ratio CI); otherwise report the variance-difference CI and don't call it a
+    ratio. Same paired construction for graph-vs-rewire.
+- **Power:** report an **MDE** for the vol comparison over the ~120 monthly OOS periods.
+  `power.min_detectable_effect` is really "MDE for the mean of a HAC-tested serially-correlated
+  series", so it transfers to the paired-difference series **only if** `ic_sd` and `phi` are
+  **re-estimated from the actual `d_t` series** (its std and lag-1 autocorrelation), not left at
+  the IC-calibrated defaults (0.08 / 0.4). Report it as an order-of-magnitude power check, not a
+  precise threshold, with two stated caveats: its Gaussian-AR(1) model understates `d_t`'s fat
+  tails (optimistic), and its internal `cap=0.2` effect ceiling can trip a spurious "underpowered"
+  warning on the QLIKE-difference scale.
+- **Diagnostics:** average condition number of Σ̂, effective N, turnover, and the count of periods
+  dropped for insufficient data (informational, not the metric).
+
+## Portfolio & numerical policy (`sample_cov`, `gmvp_weights`)
+
+- **NaN policy:** estimate on **complete cases** within the trailing window (drop any asset with a
+  missing return in the window, or use pairwise min-overlap), mirroring `graph._corr_matrix`'s
+  complete-case guard — a single NaN column otherwise poisons `S` and `Σ⁻¹` fails. Report the
+  count of assets/periods dropped.
+- **Inversion:** `gmvp_weights(cov)` computes `w = solve(cov, 1)` (not explicit `inv`); on
+  `LinAlgError` add a ridge `cov + ε·tr(cov)/n·I` and retry. Unconstrained GMVP on the sample
+  estimator is deliberately ill-conditioned (that is what the graph/shrinkage estimators improve
+  on), so the ridge is a numerical floor, not part of the compared estimator.
+
+## Regime conditioning (the paired second-tier add-on)
+
+Classify each OOS period by a strictly-**trailing** (PIT) regime proxy — trailing average pairwise
+return correlation (high = crisis / everything-moves-together). Hypothesis: the graph's covariance
+benefit **concentrates in high-correlation regimes**, because structure matters most when
+idiosyncratic diversification fails.
+
+Test on a **scale-free** statistic — the **log-variance ratio** (or QLIKE difference), NOT the raw
+variance *difference*: high-correlation regimes are high-vol regimes, so any covariance edge
+produces a larger *absolute* variance gap there mechanically; a ratio/log removes that confound.
+Compare the graph-vs-Ledoit–Wolf log-variance ratio across the **high/low median split** (2 groups,
+~60 periods each — not terciles) with a HAC test on the spread (reuses the `conditioning.py`
+low-minus-high pattern). The regime **threshold** is set on a trailing/expanding basis where
+feasible; if a full-sample median is used for the split, that in-sample-threshold peek is stated
+explicitly as a caveat. The MDE is reported at the overall n≈120, not per regime group.
+
+## Module & interfaces
+
+New module `src/marketgnn/risk.py`:
+- `dense_adjacency(graph, nodes) -> np.ndarray` — aligned, symmetrized boolean adjacency (asserts
+  node order == `nodes`).
+- `sample_cov(returns) -> np.ndarray` — complete-case sample covariance.
+- `ledoit_wolf_cc(returns) -> (cov, shrinkage)` — constant-correlation shrinkage target.
+- `graph_masked_cov(returns, adj, *, shrink=None) -> np.ndarray` — estimator A.
+- `_glasso_admm(S, penalty, *, rho=1.0, tol=1e-4, max_iter=100) -> (Theta, Z, converged)` — the
+  SPD-guarded ADMM solver, returning the PD precision `Theta`, the **sparse iterate `Z`** (carries
+  the exact off-graph zeros), and a convergence flag. Exposed (not private-only) so test 5 can
+  assert on `Z`/`Theta` directly.
+- `graph_glasso(returns, adj, *, edge_penalty, offedge_penalty, rho=1.0, tol=1e-4, max_iter=100)
+  -> np.ndarray` — estimator B: builds the per-edge penalty matrix, calls `_glasso_admm`, and
+  returns `Σ̂ = solve(Theta, I)`; falls back to A (`graph_masked_cov`) when `converged` is False.
+- `gmvp_weights(cov) -> np.ndarray` — unconstrained GMVP via `solve` + ridge fallback.
+- `portfolio_qlike(...)`, and the paired-difference helpers used for inference.
+- `evaluate_estimators(prices, graph_provider, *, window=252, rebal="M", rewire_seeds=(0,1,2), ...)
+  -> pd.DataFrame` — the manual rolling-rebalance loop; QLIKE + realized-vol per estimator, paired
+  significance vs Ledoit–Wolf, the multi-seed rewire null, condition-number/turnover diagnostics,
+  and an MDE for the vol comparison.
+- `regime_conditioning(...) -> (pd.DataFrame, dict)` — trailing-correlation regime split + the
+  scale-free (log-variance-ratio) spread test.
+- `main()` — runs Run 10 on real data (co-holding headline + correlation ceiling + rewire null)
+  and prints the estimator table and the regime table.
+
+Reuses: `graph.py` (co-holding via `coholding.make_provider`, `correlation_knn`,
+`degree_preserving_rewire`), `dataset.rebalance_dates` (the rolling loop), `evaluate` (`qlike`,
+`newey_west_tstat`, `block_bootstrap_ci`), `power.min_detectable_effect`,
+`data.download.load_market`, `data.universe.default_universe`. **Not** `PurgedWalkForward` (see
+Evaluation protocol). No new dependencies (numpy-only ADMM glasso).
+
+## Tests (`tests/test_risk.py`, TDD)
+
+1. `test_gmvp_weights_analytic` — known 2–3-asset covariance; GMVP matches the closed form
+   `Σ⁻¹1 / 1ᵀΣ⁻¹1`; weights sum to 1; singular input → ridge fallback returns finite weights.
+2. `test_dense_adjacency_aligned_and_symmetric` — scatters `edge_index` correctly, symmetrizes a
+   *directed* `correlation_knn` graph (`A == A.T`), and **raises** on a node-order mismatch.
+3. `test_ledoit_wolf_shrinks_and_conditions` — shrinkage intensity ∈ [0,1]; Σ̂ better-conditioned
+   than S; reduces to S as n_obs → ∞ on a well-sampled draw.
+4. `test_graph_masked_recovers_block_structure` — **positive control**: a synthetic block-factor
+   market whose true covariance IS the block structure; the graph-masked estimator with the
+   *true block graph* gives lower OOS GMVP realized vol (and lower QLIKE) than sample, and lower
+   than a degree-preserving-rewired graph. Proves the method can exploit real structure.
+5. `test_glasso_spd_and_recovers_sparsity` — call `_glasso_admm` directly: it returns an **SPD**
+   `Theta` even on a rank-deficient/ill-conditioned `S` (the SPD safeguard), and with a high
+   off-edge penalty the off-graph entries of the **sparse iterate `Z`** are exactly ~0 (the dense
+   `Theta` matches `Z` only to `tol`) while on-graph structure is retained (planted sparse
+   precision recovered). Separately, `graph_glasso` returns a finite PD `Σ̂` and, on a forced
+   non-convergence (`max_iter=1`), falls back to `graph_masked_cov` without raising.
+6. `test_estimator_is_pit` — Σ̂ at t is unchanged when future return rows are perturbed.
+7. `test_qlike_and_paired_diff` — `portfolio_qlike` penalizes a worse variance forecast; the
+   paired-difference construction (demeaned squared-return diff) has the expected sign on a
+   synthetic where one estimator is truly lower-variance.
+8. `test_regime_spread` — on synthetic data where structure helps only in a high-corr regime, the
+   scale-free regime spread test recovers the concentration and stays null when it shouldn't.
+
+Torch-free (pure numpy/pandas); the block-structure and glasso tests are the power/positive
+controls, mirroring the planted-recovery discipline used everywhere else in the repo.
+
+## Deliverable
+
+- `risk.py` + `test_risk.py` (raises the test count).
+- **Run 10** written up in `RESULTS.md` (estimator table, regime table, honest read) and
+  summarized in `README.md` (a "How it works" bullet + a findings line), `paper/note.md`, and
+  the roadmap; `REVIEW.md` unaffected.
+- `python -m marketgnn.risk` prints the real-data tables.
+- Personal-site `content.ts` market-gnn card updated once real numbers exist.
+
+## Honest outcome space (pre-registered)
+
+- Co-holding graph beats Ledoit–Wolf **and** its rewire → real positive result: "graphs help
+  risk (not alpha), especially in high-correlation regimes."
+- Beats sample but ties Ledoit–Wolf → honest "graphs ≈ generic shrinkage here; the free lunch is
+  already captured by constant-correlation shrinkage."
+- Either way it is reported truthfully with the significance test and the rewire null; a tie is a
+  result, not a failure.
+
+## Out of scope (YAGNI)
+
+Trading costs / net Sharpe (covariance-quality study only), factor-model covariances, the
+small-cap universe (a separate spec), supplier–customer graphs, and any return-prediction change.
