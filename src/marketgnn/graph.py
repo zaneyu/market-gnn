@@ -225,18 +225,25 @@ def edges_from_pairs(links: pd.DataFrame, nodes, *, symmetric: bool = False) -> 
     """
     pos = {t: i for i, t in enumerate(nodes)}
     w_col = "weight" in links.columns
-    src, dst, w = [], [], []
+    # accumulate into a dict keyed by directed pair so a mutual kNN pair (both i->j and
+    # j->i present in ``links``) plus symmetrization does not emit the same edge twice
+    # and double its weight in aggregation. Keep the max weight seen for a pair.
+    edges: dict[tuple[int, int], float] = {}
     for r in links.itertuples(index=False):
         a, b = pos.get(r.src), pos.get(r.dst)
         if a is None or b is None or a == b:
             continue
         wt = float(getattr(r, "weight")) if w_col else 1.0
-        src.append(a); dst.append(b); w.append(wt)
+        edges[(a, b)] = max(edges.get((a, b), wt), wt)
         if symmetric:
-            src.append(b); dst.append(a); w.append(wt)
-    if not src:
+            edges[(b, a)] = max(edges.get((b, a), wt), wt)
+    if not edges:
         return _empty(nodes)
-    return Graph(np.array([src, dst], np.int64), np.array(w, np.float32), np.asarray(nodes))
+    keys = sorted(edges)
+    src = np.array([a for a, _ in keys], np.int64)
+    dst = np.array([b for _, b in keys], np.int64)
+    w = np.array([edges[k] for k in keys], np.float32)
+    return Graph(np.vstack([src, dst]), w, np.asarray(nodes))
 
 
 def in_out_degrees(graph: Graph) -> tuple[np.ndarray, np.ndarray]:

@@ -82,9 +82,16 @@ def _read_tsv(zf: zipfile.ZipFile, name: str, usecols) -> pd.DataFrame:
 
 def load_holders(snap: dict, cmap: dict[str, str]) -> pd.DataFrame:
     """Distinct (cik, ticker) institutional-holder pairs for the universe in one
-    snapshot: 13F-HR share positions (options excluded), restricted to the year-end
-    period, mapped from CUSIP to ticker. Cached (small) so reruns don't re-parse the
-    ~250 MB info table."""
+    snapshot: original 13F-HR share positions (options and amendments excluded),
+    restricted to the year-end period AND to filings actually public by the snapshot's
+    public date, mapped from CUSIP to ticker. Cached (small) so reruns don't re-parse
+    the ~250 MB info table.
+
+    Two PIT guards live here: (1) ``SUBMISSIONTYPE == "13F-HR"`` is an *exact* match, so
+    restated amendments (13F-HR/A) that were not public at the original deadline never
+    enter the graph; (2) ``FILING_DATE <= public`` drops late/tardy filers that a
+    reader on the public date could not yet have seen. Both bound the look-ahead the
+    naive "everything in the quarterly file" approach would admit."""
     cache = _cache_dir() / f"holders_{snap['period']}.csv"
     if cache.exists():
         return pd.read_csv(cache, dtype={"cik": str, "ticker": str})
@@ -97,15 +104,27 @@ def load_holders(snap: dict, cmap: dict[str, str]) -> pd.DataFrame:
         info = _read_tsv(zf, "INFOTABLE.tsv",
                          ["ACCESSION_NUMBER", "CUSIP", "SSHPRNAMTTYPE", "PUTCALL"])
         sub = _read_tsv(zf, "SUBMISSION.tsv",
-                        ["ACCESSION_NUMBER", "SUBMISSIONTYPE", "CIK", "PERIODOFREPORT"])
+                        ["ACCESSION_NUMBER", "FILING_DATE", "SUBMISSIONTYPE", "CIK", "PERIODOFREPORT"])
     info = info[(info["SSHPRNAMTTYPE"] == "SH") & (info["PUTCALL"] == "")]
     info = info[info["CUSIP"].isin(universe_cusips)]
-    sub = sub[sub["SUBMISSIONTYPE"].str.startswith("13F-HR") & (sub["PERIODOFREPORT"] == snap["period"])]
+    filing_date = pd.to_datetime(sub["FILING_DATE"], format="%d-%b-%Y", errors="coerce")
+    sub = sub[(sub["SUBMISSIONTYPE"] == "13F-HR")
+              & (sub["PERIODOFREPORT"] == snap["period"])
+              & (filing_date <= snap["public"])]
     merged = info.merge(sub[["ACCESSION_NUMBER", "CIK"]], on="ACCESSION_NUMBER", how="inner")
     merged["ticker"] = merged["CUSIP"].map(cusip_to_ticker)
     out = merged[["CIK", "ticker"]].drop_duplicates().rename(columns={"CIK": "cik"})
     out.to_csv(cache, index=False)
     return out
+
+
+def holders_covered(snap: dict, cmap: dict[str, str]) -> int:
+    """How many universe tickers have >=1 institutional holder in this snapshot. A
+    value below len(universe) means a CUSIP-map entry failed to match any 13F row
+    (wrong/stale identifier) and that name is an isolated node -- the exact failure the
+    committed map must avoid."""
+    h = load_holders(snap, cmap)
+    return int(h["ticker"].nunique())
 
 
 def coholding_links(holders: pd.DataFrame, nodes, *, k: int = 10, min_common: int = 5) -> pd.DataFrame:
@@ -153,9 +172,15 @@ def build_snapshot_graphs(nodes, *, k: int = 10, cmap: dict[str, str] | None = N
 
 def pick_asof(graphs: list[tuple[pd.Timestamp, G.Graph]], asof) -> G.Graph:
     """The most recent snapshot graph whose filings were already public by ``asof``
-    (PIT); before the first public date, the earliest snapshot (never future data)."""
+    (PIT). Before the first public date NOTHING is public yet, so return an *empty*
+    graph -- never the earliest snapshot, whose Dec holdings were not filed until the
+    following Feb and would be a look-ahead. (In practice ``warmup`` pushes the first
+    evaluated date well past the first public date, but the boundary must be correct.)"""
     avail = [g for (pub, g) in graphs if pub <= pd.Timestamp(asof)]
-    return avail[-1] if avail else graphs[0][1]
+    if avail:
+        return avail[-1]
+    nodes = list(graphs[0][1].nodes)
+    return G.edges_from_pairs(pd.DataFrame({"src": [], "dst": []}), nodes)
 
 
 def make_provider(nodes, *, k: int = 10, cmap: dict[str, str] | None = None):
@@ -213,7 +238,14 @@ def main():
           f"({len(_snapshots())} year-end snapshots)...")
     provider, graphs = make_provider(nodes, k=10, cmap=cmap)
     degs = [g.avg_degree for _, g in graphs]
+    # institution counts per snapshot, so "~N institutions" is auditable, not folklore
+    insts = [load_holders(snap, cmap)["cik"].nunique() for snap in _snapshots()]
+    covered = [holders_covered(snap, cmap) for snap in _snapshots()]
     print(f"co-holding graph avg degree {np.mean(degs):.1f} (per snapshot {degs[0]:.1f}..{degs[-1]:.1f})")
+    print(f"distinct institutions (13F filers touching the universe): "
+          f"{min(insts)}..{max(insts)} across snapshots, ~{int(np.median(insts))} median")
+    print(f"universe names with >=1 holder: {min(covered)}..{max(covered)} of {len(nodes)} "
+          f"(0 means a CUSIP-map miss -> isolated node)")
 
     # --- power: plant a lead-lag on the real co-holding graph and recover it ---
     print("\n=== A. planted-signal recovery on the REAL co-holding graph (power) ===")

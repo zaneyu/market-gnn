@@ -23,11 +23,11 @@ signal, and decomposed where the apparent "graph alpha" actually comes from:
    link. Neighbours' past returns → own future return (the channel Cohen–Frazzini /
    industry-momentum predicts). We first **plant** the effect and show the pipeline
    **recovers it** (IC 0.089, HAC t 9.6, rewire-null clean) — proving power — then on real
-   data find ~0.006 with **80% power to detect 0.036**. And it is not a proxy artefact: a
+   data find ~0.006 with **80% power to detect ~0.032**. And it is not a proxy artefact: a
    graph of genuine **13F institutional co-holding** (Anton–Polk "Connected Stocks", built
-   from the actual SEC filings, PIT) is *also* a powered null (IC +0.010, 80% power to detect
-   0.023, rewire-clean) — the warmest linkage tested, still not significant. Absent, not
-   undetectable; consistent with the effect living in small/illiquid names this universe
+   from the actual SEC filings, PIT) is *also* a powered null (IC +0.012, HAC t 1.4, 80% power
+   to detect ~0.025, rewire-clean) — the warmest linkage tested, still not significant. Absent,
+   not undetectable; consistent with the effect living in small/illiquid names this universe
    excludes.
 3. **The vol "predictability" is ~90% persistence** — a naive trailing-vol forecast gets 0.435
    of the model's 0.479, and the model is *worse* on QLIKE (level calibration).
@@ -38,7 +38,11 @@ signal, and decomposed where the apparent "graph alpha" actually comes from:
    the graph nulls are *real absences*, bracketed by positive controls on both real data
    (reversal) and synthetic data (planted lead-lag) — not a pipeline that can't find anything.
    (Gross rank-IC; reversal is high-turnover and cost-fragile — reported as a statistical
-   control, not a tradable strategy.)
+   control, not a tradable strategy.) **Survivorship caveat:** unlike the graph *nulls* (where
+   survivorship bias runs *toward* finding signal, so a null is conservative), this reversal
+   result is a *positive* return claim run on a current-membership universe — survivorship-exposed.
+   Treat it as a suggestive control that the harness can find a real effect, not a clean tradable
+   finding; a fully PIT reversal run is future work (needs delisted-name prices).
 
 **Net:** the graph adds no return signal that survives leak-free, powered, control-checked
 evaluation; the return signal that *is* present (short-horizon reversal) is non-graph and
@@ -46,7 +50,7 @@ cost-fragile — and this repo is the harness that separates a real effect from 
 overlap / over-smoothing artifacts that make graph "alpha" look real.
 Full decomposition and numbers in [RESULTS.md](RESULTS.md).
 
-The reversal effect is real gross but dies at ~1 bp of cost, and (on a 194-name universe) is
+The reversal effect is real gross but dies at ~0.9 bp of cost, and (on a 194-name universe) is
 significant across liquidity terciles without a significant illiquidity gradient:
 
 <p align="center">
@@ -64,15 +68,20 @@ A null is only worth reporting if the pipeline could have found signal. Two guar
   rewire** null stays flat; **purged walk-forward** removes label-overlap leakage; point-in-time
   purity of graph/features/labels is asserted, not assumed.
 
+This repo is held to its own standard: [REVIEW.md](REVIEW.md) logs an adversarial review round
+(four hostile passes) and every bug it found and fixed — a CUSIP map that silently isolated 5
+names, a silent synthetic-data fallback, an FDR that pooled null controls, and a primary endpoint
+that was never actually computed — plus the reviewer claims that were rejected on verification.
+
 ```bash
-pytest -q     # 59 tests (3 GNN/temporal tests skip without torch); core needs no GNN stack
+pytest -q     # 62 tests (3 GNN/temporal skip without torch, 1 skips without the fetched 13F data)
 ```
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"          # core + tests (no torch needed)
-pytest -q                        # 59 tests (56 without torch), ~30s
+pytest -q                        # 62 tests (58 in torch-free CI), ~40s
 python -m marketgnn.train --synthetic          # offline factor-market demo
 ```
 
@@ -102,6 +111,11 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
 - **Models** (`models/`) — ridge and LightGBM baselines; the GNN and MLP are the **same
   network** toggling whether real edges are visible (zero the graph → recover the MLP),
   sharing head, a differentiable **ranking loss**, and training loop, so the A/B is clean.
+- **Primary endpoint** (`train.primary_endpoint`) — the pre-registered H1 is tested as an
+  actual **paired** comparison: the per-date IC-*difference* series (GNN minus MLP, same dates
+  and universe) with a HAC t-stat, block-bootstrap CI, and an MDE — the exact estimand
+  `power.py` is powered for, reported *outside* the FDR family, not eyeballed from two separate
+  IC-vs-zero rows. (Synthetic: ΔIC +0.005, t 0.33, p 0.75, MDE 0.047 — powered, no gap.)
 - **Evaluation** (`evaluate.py`) — per-date rank-IC aggregated with **Newey–West/HAC**
   t-stats and a **block bootstrap** (labels are autocorrelated; i.i.d. inference overstates
   significance). One pre-registered primary endpoint (H1); the grid is **BH-FDR** controlled.
@@ -114,8 +128,9 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   and the own-momentum control. This is the experiment that makes the null a *result*.
 - **Temporal GNN** (`models/temporal.py`) — a **GConvGRU** (graph-conv spatial layer → GRU
   over dates): the *learned* counterpart to the zero-parameter lead-lag signal, with the same
-  `use_graph` blindfold A/B. It recovers a planted lead-lag (IC +0.067, t 3.9) then nulls on
-  real data (graph +0.013 vs no-graph +0.007, n.s.) — the null isn't a modelling limitation.
+  `use_graph` blindfold A/B. It recovers a planted lead-lag (IC +0.067, t 3.9; blindfold −0.012,
+  n.s.) then nulls on real data (graph +0.006 vs no-graph +0.007, both n.s. — the graph if
+  anything hurts) — the null isn't a modelling limitation.
 - **Robustness** (`robustness.py`) — vol model vs the naive random-walk forecast (rank-IC and
   QLIKE), showing how much of the vol IC is mere persistence.
 - **Signals** (`signals.py`) — real-data positive controls: textbook anomalies (short-term
@@ -131,13 +146,22 @@ To train the GNN vs the matched MLP (the primary H1 test): `pip install -e ".[gn
   as PNGs (`figures/`), because visual evidence lands harder than tables.
 - **Real economic-link graph** (`coholding.py`) — not a proxy: an **institutional co-holding**
   graph (Anton–Polk "Connected Stocks") built from the **SEC's structured 13F filings** — 11
-  year-end PIT snapshots, ~4,370 institutions, edges = cosine of shared-holder vectors. Runs
+  year-end PIT snapshots, **~2,500–5,800 filing institutions per snapshot** (median ~3,600, and
+  printed at runtime, not asserted in prose), edges = cosine of shared-holder vectors, avg degree
+  ~16.9. Two PIT guards live in the loader: an **exact** `13F-HR` match (drops restated
+  amendments) and a **`FILING_DATE <= public`** filter (drops late filers not yet public). Runs
   the identical lead-lag harness (with a planted-recovery power proof over the real graph) on a
   genuine economic link. `graph.edges_from_pairs` is the generic hook; `data/cusip_map.csv` is
-  the committed, auditable ticker→CUSIP map.
+  the committed, auditable ticker→CUSIP map, **check-digit-validated and coverage-tested** so a
+  bond/depositary/placeholder identifier can't silently isolate a name (the bug this review
+  caught for BAC/SCHW/DIS/AMT/SPG).
 - **Reproducibility** (`data/snapshot.py` + `data_manifest.json`) — pinned universe/dates and a
-  content hash of the fetched prices, so a cloner verifies byte-identical data (Yahoo ToS
-  prevents shipping the data itself) before trusting the real-data numbers.
+  content hash of the fetched prices (Yahoo ToS prevents shipping the data itself). Honest
+  caveat: Yahoo **retroactively re-adjusts** historical closes for every later split/dividend,
+  so a clone re-run months later reproduces the numbers to ~2 significant figures, **not**
+  byte-identically — the hash flags *that your pull differs*, it is not a promise the study is
+  bit-reproducible. The synthetic planted-recovery results, by contrast, are seeded and exactly
+  reproducible, which is why they carry the load-bearing power claims.
 
 ## Data & survivorship (read before trusting return claims)
 
@@ -153,7 +177,7 @@ return claims require the PIT path.**
 src/marketgnn/  splits · graph · features · evaluate · dataset · power · leadlag · robustness · signals · costs · conditioning · coholding[13F] · figures · train
                 models/ (ridge · gbm · losses · gnn[MLP≡GNN] · temporal[GConvGRU])
                 data/   (download · universe[PIT membership] · cusip_map.csv)
-tests/          59 tests — leak/PIT/stat/power/lead-lag/coholding/temporal/control/cost/conditioning harness
+tests/          62 tests — leak/PIT/stat/power/lead-lag/coholding[+CUSIP validation]/temporal/control/cost/conditioning harness
 configs/        default.yaml
 paper/note.md   writeup
 ```

@@ -44,8 +44,18 @@ def download_prices(tickers, start: str, end: str, *, benchmark: str = "SPY", ca
     return prices, volume, market
 
 
-def load_market(*, synthetic: bool, tickers=None, start="2015-01-01", end="2024-12-31", **kw):
-    """Single entry point used by the trainer. Falls back to synthetic on any error."""
+def load_market(*, synthetic: bool, tickers=None, start="2015-01-01", end="2024-12-31",
+                allow_synthetic_fallback: bool = False, **kw):
+    """Single entry point used by the trainer.
+
+    With ``synthetic=True`` returns the offline factor market. With ``synthetic=False``
+    it returns REAL data and, by default, **raises** if that data is unavailable rather
+    than silently substituting synthetic — so a results table headed "real prices" can
+    never be quietly computed on a 60-name synthetic panel (which is a different
+    universe entirely). Pass ``allow_synthetic_fallback=True`` to opt into the old
+    degrade-gracefully behaviour for interactive/offline demos; it emits a LOUD banner
+    and returns synthetic data for the *requested* tickers so at least the universe
+    matches."""
     if synthetic:
         return make_synthetic(**kw)
     try:
@@ -54,6 +64,15 @@ def load_market(*, synthetic: bool, tickers=None, start="2015-01-01", end="2024-
         prices, volume, market = download_prices(tickers, start, end)
         sectors = default_sectors(list(prices.columns))
         return prices, volume, sectors, market
-    except Exception as exc:  # noqa: BLE001 -- offline / missing dep -> synthetic
-        print(f"[download] real data unavailable ({exc}); falling back to synthetic")
-        return make_synthetic(**kw)
+    except Exception as exc:  # noqa: BLE001 -- offline / missing dep
+        if not allow_synthetic_fallback:
+            raise RuntimeError(
+                f"real market data unavailable ({exc}); refusing to silently return "
+                f"synthetic data for a synthetic=False call. Pre-populate the parquet "
+                f"cache, install yfinance, or pass allow_synthetic_fallback=True."
+            ) from exc
+        n = len(list(tickers)) if tickers is not None else 60
+        print("\n" + "!" * 72 + f"\n[download] REAL DATA UNAVAILABLE ({exc}).\n"
+              f"[download] FALLING BACK TO SYNTHETIC ({n} names) — results are NOT real.\n"
+              + "!" * 72 + "\n")
+        return make_synthetic(n_assets=n, **kw)

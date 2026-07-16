@@ -150,8 +150,19 @@ def run_leadlag(
         "n_dates": s["n"],
     })
     table = pd.DataFrame(rows)
-    reject, q = benjamini_hochberg(table["p"].fillna(1.0).to_numpy())
-    table["fdr_sig"], table["q"] = reject, q
+    # BH-FDR only over the genuine ALTERNATIVE hypotheses -- the real-linkage lead-lag
+    # signals. The rewire graph and own-momentum rows are NULL CONTROLS, not discovery
+    # candidates; folding their (near-1) p-values into the family would inflate the
+    # denominator and make the real endpoints easier to "discover." Controls are shown
+    # with fdr_sig = False and q = NaN.
+    is_control = table["edges"].eq("rewire") | table["signal"].eq("own_mom")
+    table["fdr_sig"] = False
+    table["q"] = np.nan
+    alt = ~is_control
+    if alt.any():
+        reject, q = benjamini_hochberg(table.loc[alt, "p"].fillna(1.0).to_numpy())
+        table.loc[alt, "fdr_sig"] = reject
+        table.loc[alt, "q"] = q
     return table
 
 

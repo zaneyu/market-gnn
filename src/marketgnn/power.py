@@ -15,16 +15,19 @@ from .evaluate import newey_west_tstat, two_sided_p
 
 
 def _ar1(n, phi, mean, sd, rng):
-    # AR(1) with the target mean as a genuine offset. Do NOT re-center to the
-    # sample mean: that would pin the t-stat numerator to effect/se on every draw,
-    # making the numerator deterministic and the "power" a near-step function
-    # (understated at small effects, overstated at large). The sampling variation
-    # in the mean is exactly what a Monte-Carlo power estimate must keep.
-    e = rng.normal(0, sd, size=n)
+    # Stationary AR(1) whose MARGINAL sd equals ``sd`` (the empirical IC sd the caller
+    # measured). A raw AR(1) driven by innovations of sd ``sd`` has marginal sd
+    # sd/sqrt(1-phi^2) -- up to ~2.3x too wide at phi=0.9 -- which would over-disperse
+    # the series and inflate the MDE. So scale the innovation to sd*sqrt(1-phi^2) and
+    # start from the stationary distribution.
+    #   Do NOT re-center to the sample mean: that would pin the t-stat numerator to
+    # effect/se on every draw, making "power" a near-step function. The sampling
+    # variation in the mean is exactly what a Monte-Carlo power estimate must keep.
+    sigma_e = sd * np.sqrt(max(1e-12, 1.0 - phi * phi))
     x = np.empty(n)
-    x[0] = e[0]
+    x[0] = rng.normal(0, sd)                      # stationary start
     for t in range(1, n):
-        x[t] = phi * x[t - 1] + e[t]
+        x[t] = phi * x[t - 1] + rng.normal(0, sigma_e)
     return x + mean
 
 
@@ -41,7 +44,9 @@ def power(
 ) -> float:
     """Probability the HAC t-test rejects H0 when the true mean IC gap == ``effect``."""
     rng = np.random.default_rng(seed)
-    lag = hac_lag if hac_lag is not None else max(1, int(0.1 * n_dates))
+    # use the SAME HAC lag the real evaluation uses (Newey-West rule of thumb), so the
+    # MDE describes the test actually run -- not a larger, more conservative lag.
+    lag = hac_lag if hac_lag is not None else int(np.floor(4 * (n_dates / 100) ** (2 / 9)))
     rejects = 0
     for _ in range(n_sims):
         x = _ar1(n_dates, phi, effect, ic_sd, rng)

@@ -136,13 +136,13 @@ finds nothing**. So a null on real data means *absent*, not *undetectable*.
 
 | edges       | signal        | mean IC | HAC t | MDE₈₀ | FDR sig |
 |-------------|---------------|---------|-------|-------|---------|
-| sector      | leadlag       | +0.006  | 0.64  | 0.036 | no      |
-| sector      | leadlag_resid | +0.008  | 1.17  | 0.029 | no      |
-| correlation | leadlag       | −0.008  | −0.75 | 0.043 | no      |
-| rewire      | leadlag       | +0.000  | −0.01 | 0.019 | no      |
+| sector      | leadlag       | +0.006  | 0.64  | 0.027 | no      |
+| sector      | leadlag_resid | +0.008  | 1.17  | 0.022 | no      |
+| correlation | leadlag       | −0.008  | −0.75 | 0.032 | no      |
+| rewire      | leadlag       | +0.000  | −0.01 | 0.014 | no      |
 
 **Read — a POWERED null, which is the actual result:** we had 80% power to detect an IC of
-0.036 (the lead-lag literature implies ~0.02-0.04) and found ~0.006. Industry/correlation
+~0.03 (the lead-lag literature implies ~0.02-0.04) and found ~0.006. Industry/correlation
 lead-lag is **not present in liquid large-caps at weekly frequency over 2014-2024** — fully
 consistent with the literature, where the effect lives in **small, illiquid names** (which
 this universe excludes by construction) and has decayed post-2000. The rewire null and the
@@ -201,20 +201,25 @@ Runs 1–5 tested the graph as a **correlation/industry proxy** for economic lin
 lead-lag literature (Anton–Polk, "Connected Stocks", JF 2014) points at a *genuine* link:
 stocks held by the **same institutions** comove and lead-lag through correlated fund flows.
 So build that graph from the actual filings and run the identical harness on it. Source:
-the SEC's structured **13F** datasets — 11 year-end snapshots (Dec-2013 … Dec-2023), ~4,370
-institutions per snapshot, all 90 names. Two stocks are linked by the cosine of their binary
-institutional-holder vectors (kNN, k=10; avg degree ~18.6). **Point-in-time by construction:**
-the `{Y}q1` dataset holds Dec-(Y-1) positions filed within the 45-day deadline and public from
-~mid-Feb Y, and each snapshot graph is only applied to dates on/after its public date.
-(`python -m marketgnn.coholding`; ticker→CUSIP in the committed, auditable `data/cusip_map.csv`.)
+the SEC's structured **13F** datasets — 11 year-end snapshots (Dec-2013 … Dec-2023), **~2,500–
+5,800 filing institutions per snapshot** (median ~3,600, printed at runtime), covering all 90
+names in the latest snapshot (fewer in the earliest years, before names like META/ABBV/PYPL were
+public — a coverage figure the runner prints, not folklore). Two stocks are linked by the cosine
+of their binary institutional-holder vectors (kNN, k=10; avg degree ~16.9). **Point-in-time by
+construction:** the `{Y}q1` dataset holds Dec-(Y-1) positions filed within the 45-day deadline
+and public from ~mid-Feb Y, and each snapshot graph is only applied to dates on/after its public
+date. Two PIT guards in the loader make that exact: an **exact `13F-HR`** match (restated
+amendments excluded) and a **`FILING_DATE <= public`** filter (tardy filers not yet public are
+dropped). (`python -m marketgnn.coholding`; ticker→CUSIP in the committed, auditable,
+check-digit-validated `data/cusip_map.csv`.)
 
 **First, power — plant a lead-lag ALONG the real co-holding graph and recover it:**
 
 | edges       | signal        | mean IC | HAC t | MDE₈₀ | FDR sig |
 |-------------|---------------|---------|-------|-------|---------|
-| coholding   | leadlag       | +0.025  | 3.65  | 0.019 | **yes** |
-| coholding   | leadlag_resid | +0.024  | 3.57  | 0.019 | **yes** |
-| rewire      | leadlag       | −0.001  | −0.41 | 0.019 | no      |
+| coholding   | leadlag       | +0.027  | 4.05  | 0.020 | **yes** |
+| coholding   | leadlag_resid | +0.026  | 4.02  | 0.020 | **yes** |
+| rewire      | leadlag       | −0.007  | −2.59 | 0.018 | no      |
 
 The pipeline **recovers** a planted effect over *this* graph and the degree-preserving rewire
 finds nothing — so, as everywhere in this repo, a null on the real data is *absent*, not
@@ -224,15 +229,15 @@ finds nothing — so, as everywhere in this repo, a null on the real data is *ab
 
 | edges       | signal        | mean IC | HAC t | p    | MDE₈₀ | FDR sig |
 |-------------|---------------|---------|-------|------|-------|---------|
-| coholding   | leadlag       | +0.010  | 1.18  | 0.24 | 0.023 | no      |
-| coholding   | leadlag_resid | +0.009  | 1.27  | 0.20 | 0.019 | no      |
-| rewire      | leadlag       | −0.002  | −0.31 | 0.76 | 0.013 | no      |
+| coholding   | leadlag       | +0.012  | 1.40  | 0.16 | 0.025 | no      |
+| coholding   | leadlag_resid | +0.011  | 1.57  | 0.12 | 0.021 | no      |
+| rewire      | leadlag       | +0.003  | +0.89 | 0.37 | 0.014 | no      |
 
 **Read — a *powered* null on the real economic link, which is the stronger result.** Even the
 genuine co-holding graph the literature points to adds **no lead-lag return signal that
-survives** on liquid large-caps: IC +0.010 with 80% power to detect 0.023, not significant,
+survives** on liquid large-caps: IC +0.012 with 80% power to detect ~0.025, not significant,
 rewire-null clean, above the own-momentum control. It is directionally the *warmest* linkage
-tested (+0.010 vs the sector/correlation proxies' +0.006 / −0.008 in Run 5) — consistent with a
+tested (+0.012 vs the sector/correlation proxies' +0.006 / −0.008 in Run 5) — consistent with a
 real-but-tiny effect — but it does not clear the bar. This closes the "maybe the proxy graph
 was hiding a real link" escape hatch: the real link is measured, powered, and still null here.
 (On these mega/large-caps the co-holding graph is also very *central* — nearly every institution
@@ -265,15 +270,15 @@ carries the signal — the A/B is doing real work.
 
 | graph            | mean IC (OOS) | HAC t | p    |
 |------------------|---------------|-------|------|
-| yes (co-holding) | +0.013        | 0.94  | 0.35 |
+| yes (co-holding) | +0.006        | 0.44  | 0.66 |
 | no (self-loops)  | +0.007        | 0.51  | 0.61 |
 
 **Read — the null survives a learned model that CAN see time.** Given the real economic
-link *and* the capacity to exploit temporal structure, the GConvGRU adds just +0.006 IC
-over the graph-blindfolded twin and neither clears significance (t < 1). So the earlier
-lead-lag nulls were **not a modelling limitation** — a linear zero-parameter read and a
-learned spatiotemporal network reach the same answer on these names. Same conclusion,
-one more escape hatch (\"you just needed a bigger model\") closed.
+link *and* the capacity to exploit temporal structure, the GConvGRU's graph variant scores
++0.006 IC — if anything *below* its own graph-blindfolded twin (+0.007), and neither clears
+significance (t < 1). So the earlier lead-lag nulls were **not a modelling limitation** — a
+linear zero-parameter read and a learned spatiotemporal network reach the same answer on these
+names. Same conclusion, one more escape hatch (\"you just needed a bigger model\") closed.
 
 ## Headline (nine runs)
 
@@ -286,13 +291,21 @@ is ~90% persistence (Run 3), and inclusion-timing correction shrinks the already
 (Run 4).
 
 A **learned spatiotemporal model** (GConvGRU, Run 9) — given the real link *and* the
-capacity to use time — reaches the same null (graph +0.013 vs no-graph +0.007, both n.s.),
+capacity to use time — reaches the same null (graph +0.006 vs no-graph +0.007, both n.s.),
 after recovering a planted effect (+0.067, t 3.9); so the null is not a modelling limitation.
+
+The **pre-registered primary endpoint (H1)** is tested directly, not eyeballed: the *paired*
+per-date IC-difference series (GNN minus MLP on the same dates/universe) with a HAC t and
+block-bootstrap CI (`train.primary_endpoint`) — the exact estimand `power.py` powers for.
+Synthetic: ΔIC +0.005, t 0.33, p 0.75, MDE 0.047 (powered) — no GNN-over-MLP gap.
 
 **What DOES carry return signal (Run 6):** the same harness finds **short-term (1-day) reversal
 strongly significant on real data** (IC +0.015, HAC t 3.4, p<0.001, FDR-sig) — a genuine
-non-null. So the nulls above are **real absences bracketed by positive controls on both real
-data (reversal) and synthetic data (planted lead-lag)**, not a pipeline that can't find anything.
+non-null (though a *survivorship-exposed* positive claim: unlike the graph nulls, bias here runs
+toward finding signal, so treat it as a harness-can-find-things control, not a clean tradable
+result — a fully PIT reversal run needs delisted-name prices). So the nulls above are **real
+absences bracketed by positive controls on both real data (reversal) and synthetic data
+(planted lead-lag)**, not a pipeline that can't find anything.
 
 Net: **the graph adds no cross-sectional return signal that survives leak-free, powered,
 control-checked evaluation; the return signal that IS present (short-horizon reversal) is

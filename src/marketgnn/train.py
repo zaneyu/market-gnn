@@ -79,8 +79,9 @@ def _fold_predictions(model_name, dataset, cv, target, seed, val_gap=1):
     return np.concatenate(preds), np.concatenate(targs), np.concatenate(dts)
 
 
-def run(config: dict) -> pd.DataFrame:
-    cfg = {**DEFAULTS, **config}
+def _prep(cfg: dict):
+    """Load the market and build the purged walk-forward CV shared by the ablation grid
+    and the primary-endpoint test."""
     from .data.download import load_market
     from .data.universe import default_universe
 
@@ -91,10 +92,78 @@ def run(config: dict) -> pd.DataFrame:
         end=cfg.get("end", "2024-12-31"),
     )
     rebal = rebalance_dates(prices.index, cfg["rebal_freq"])
+    # purge must cover the label horizon: derive the minimum purge in rebalance steps
+    # from label_horizon and the rebalance cadence, and never trust a smaller knob.
+    steps_per_rebal = _rebal_step_len(prices.index, rebal, cfg["rebal_freq"])
+    need = int(np.ceil(cfg["label_horizon"] / max(1, steps_per_rebal)))
+    purge = max(cfg["purge_steps"], need)
+    if purge > cfg["purge_steps"]:
+        print(f"[purge] label_horizon={cfg['label_horizon']} over ~{steps_per_rebal}-day "
+              f"rebalance steps needs purge>={need}; using {purge} (was {cfg['purge_steps']}).")
+    cfg["purge_steps"] = purge
     cv = PurgedWalkForward(
-        label_horizon=cfg["purge_steps"], n_test=cfg["n_test"], embargo=cfg["embargo_steps"],
+        label_horizon=purge, n_test=cfg["n_test"], embargo=cfg["embargo_steps"],
         min_train=cfg["min_train"], step=cfg["step"],
     )
+    return prices, volume, sectors, market, rebal, cv
+
+
+def _rebal_step_len(index, rebal, rebal_freq: str) -> int:
+    """Median trading-day gap between consecutive rebalance dates (so a 5-day label
+    over a weekly rebalance = ~1 step, over a monthly = ~1 step but ~21 days)."""
+    locs = index.get_indexer(list(rebal))
+    locs = locs[locs >= 0]
+    if len(locs) < 2:
+        return 5
+    return int(np.median(np.diff(locs)))
+
+
+def primary_endpoint(config: dict) -> dict | None:
+    """The pre-registered H1, computed as an actual paired test (not two eyeballed
+    rows): does the GNN beat the MATCHED MLP on out-of-sample return rank-IC? Both
+    models see the identical feature set (including the neighbour-return feature) and
+    the same dataset/graph; they differ only in whether real edges are visible in
+    message passing. We form the per-date IC-DIFFERENCE series (GNN minus MLP on the
+    same dates and universe) and test its mean with a HAC t-stat + block-bootstrap CI
+    -- exactly the estimand power.py computes an MDE for. Returns None if torch is
+    absent."""
+    cfg = {**DEFAULTS, **config}
+    if not (_deps_ok("gnn") and _deps_ok("mlp")):
+        return None
+    from .leadlag import _estimate_phi
+    from .power import min_detectable_effect
+
+    prices, volume, sectors, market, rebal, cv = _prep(cfg)
+    graph_kind = cfg.get("primary_graph", "correlation")
+    target = "ret"
+    ds = build_dataset(
+        prices, volume, sectors, market, rebal, graph_kind=graph_kind,
+        label_horizon=cfg["label_horizon"], corr_window=cfg["corr_window"],
+        k=cfg["k"], nbr_lookback=cfg["nbr_lookback"], warmup=cfg["warmup"],
+    )
+    val_gap = cfg["purge_steps"] + cfg["embargo_steps"]
+    ics = {}
+    for m in ("gnn", "mlp"):
+        pred, targ, dts = _fold_predictions(m, ds, cv, target, cfg["seed"], val_gap=val_gap)
+        ics[m] = per_date_ic(pred, targ, dts).dropna()
+    diff = (ics["gnn"] - ics["mlp"]).dropna()
+    if len(diff) < 3:
+        return None
+    s = ic_summary(diff, hac_lag=cfg["hac_lag"])
+    lo, hi = block_bootstrap_ci(diff.to_numpy(), block=max(2, cfg["purge_steps"] + 1), seed=cfg["seed"])
+    mde = min_detectable_effect(n_dates=s["n"], ic_sd=max(diff.std(ddof=1), 1e-6),
+                                phi=_estimate_phi(diff), n_sims=400)
+    return {
+        "graph": graph_kind, "target": target,
+        "ic_gnn": float(ics["gnn"].mean()), "ic_mlp": float(ics["mlp"].mean()),
+        "delta_ic": s["mean_ic"], "hac_t": s["hac_t"], "p": two_sided_p(s["hac_t"]),
+        "ci_lo": lo, "ci_hi": hi, "mde_80": mde, "n_dates": s["n"],
+    }
+
+
+def run(config: dict) -> pd.DataFrame:
+    cfg = {**DEFAULTS, **config}
+    prices, volume, sectors, market, rebal, cv = _prep(cfg)
 
     membership = None
     if cfg.get("use_membership") and not cfg.get("synthetic", True):
@@ -131,8 +200,20 @@ def run(config: dict) -> pd.DataFrame:
 
     table = pd.DataFrame(rows)
     if len(table):
-        reject, q = benjamini_hochberg(table["p"].fillna(1.0).to_numpy())
-        table["fdr_sig"], table["q"] = reject, q
+        # BH-FDR within a HOMOGENEOUS family: separately per target (ret and vol are
+        # different endpoints; vol's near-certain rejections must not shift the return
+        # threshold) and EXCLUDING null-control graph kinds (rewire/random/none), which
+        # are not discovery candidates. Controls get fdr_sig=False, q=NaN.
+        controls = {"rewire", "random", "none"}
+        table["fdr_sig"] = False
+        table["q"] = np.nan
+        is_alt = ~table["graph"].isin(controls)
+        for tgt in table["target"].unique():
+            fam = is_alt & table["target"].eq(tgt)
+            if fam.any():
+                reject, q = benjamini_hochberg(table.loc[fam, "p"].fillna(1.0).to_numpy())
+                table.loc[fam, "fdr_sig"] = reject
+                table.loc[fam, "q"] = q
     return table
 
 
@@ -164,8 +245,21 @@ def main():
     table = run(config)
     print("\n=== ablation (out-of-sample, purged walk-forward) ===")
     print(_format(table))
-    print("\nHAC t-stats account for label autocorrelation; q = BH-FDR across the grid.")
-    print("Primary endpoint (H1): compare model=gnn vs model=mlp at target=ret.")
+    print("\nHAC t-stats account for label autocorrelation; q = BH-FDR within each "
+          "target family, excluding null controls (rewire/none).")
+
+    # the pre-registered primary endpoint, as an actual paired test
+    pe = primary_endpoint(config)
+    if pe is None:
+        print("\nPrimary endpoint (H1): needs torch (mlp+gnn); install '.[gnn]' to run it.")
+    else:
+        print("\n=== PRIMARY ENDPOINT (H1): GNN - MLP paired IC difference, target=ret ===")
+        print(f"  graph={pe['graph']}  IC(gnn)={pe['ic_gnn']:+.4f}  IC(mlp)={pe['ic_mlp']:+.4f}")
+        print(f"  ΔIC = {pe['delta_ic']:+.4f}   HAC t = {pe['hac_t']:+.2f}   p = {pe['p']:.3f}"
+              f"   95% CI [{pe['ci_lo']:+.4f}, {pe['ci_hi']:+.4f}]")
+        print(f"  n_dates = {pe['n_dates']}   MDE(80% power) = {pe['mde_80']:.4f}   "
+              f"-> {'DETECTABLE gap present' if pe['p'] < 0.05 else 'no significant gap'} "
+              f"({'powered' if pe['mde_80'] < 0.05 else 'underpowered'} at this cadence)")
 
 
 if __name__ == "__main__":

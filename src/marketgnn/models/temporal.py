@@ -85,11 +85,30 @@ class TemporalGNN:
     def _edges(self, graphs, date, n, device):
         g = graphs.get(date) if graphs else None
         if self.use_graph and g is not None and g.num_edges:
+            g = self._align(g)
             ei = G.add_self_loops(G.symmetrize(g)).edge_index
         else:
             loops = np.arange(n)
             ei = np.vstack([loops, loops])
         return torch.as_tensor(ei, dtype=torch.long, device=device)
+
+    def _align(self, g):
+        """Remap a provider graph's edges onto ``self._nodes`` positions. The feature
+        rows are ordered by ``self._nodes`` (= prices.columns); an externally-built
+        graph (e.g. the 13F provider, ordered by its own node list) must be reindexed
+        or every edge would silently connect the wrong pair. Edges touching a name not
+        in the fixed universe are dropped. No-op fast path when the order already
+        matches."""
+        gnodes = list(g.nodes)
+        if gnodes == self._nodes:
+            return g
+        pos = {t: i for i, t in enumerate(self._nodes)}
+        remap = np.array([pos.get(t, -1) for t in gnodes], dtype=np.int64)
+        src, dst = g.edge_index
+        ns, nd = remap[src], remap[dst]
+        keep = (ns >= 0) & (nd >= 0)
+        return G.Graph(np.vstack([ns[keep], nd[keep]]),
+                       g.edge_weight[keep], np.asarray(self._nodes))
 
     def _seq(self, X, y, graphs, dates, device):
         """Aligned [n]-node tensors per date over the FIXED universe, with a mask of
@@ -218,7 +237,12 @@ def run_temporal(prices, graphs, *, label_horizon=5, warmup=260, rebal_freq="W",
     y = pd.concat(yparts)
 
     cut = int(len(rebal) * (1 - test_frac))
-    gap = max(1, label_horizon // 5)  # purge the horizon overlap between train and test
+    # purge the train/test boundary by at least one label horizon, measured in
+    # rebalance steps from the ACTUAL date spacing (not a hardcoded weekly cadence),
+    # so a monthly or daily rebal still removes the right overlap.
+    locs = idx.get_indexer(rebal)
+    step_len = int(np.median(np.diff(locs))) if len(locs) > 1 else 5
+    gap = max(1, int(np.ceil(label_horizon / max(1, step_len))))
     train_dates, test_dates = rebal[:cut], rebal[cut + gap:]
 
     rows = []

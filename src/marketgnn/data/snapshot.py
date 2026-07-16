@@ -1,8 +1,15 @@
 """Reproducibility manifest. We do NOT redistribute vendor price data (Yahoo ToS),
 so real-data results can't be reproduced by shipping a parquet. Instead we pin the
-exact universe + date range and record a content hash of the fetched arrays, so a
-cloner re-fetches, recomputes the hash, and verifies they have byte-identical data
-before trusting the numbers in RESULTS.md.
+exact universe + date range and record a content hash of the fetched arrays.
+
+Honest scope: this hash is a *drift detector*, not a promise of bit-reproducibility.
+Yahoo retroactively re-adjusts historical closes for every later split/dividend, so a
+clone re-fetching months later will generally get a DIFFERENT (still-correct) matrix and
+a different hash. A mismatch therefore means "your pull differs from mine" (expected over
+time), and real-data figures reproduce to ~2 significant figures, not byte-identically.
+The seeded synthetic planted-recovery results are the exactly-reproducible ones, which is
+why they carry the load-bearing power claims. The hash still pins column/date/rounding
+conventions and catches gross universe/date drift.
 """
 
 from __future__ import annotations
